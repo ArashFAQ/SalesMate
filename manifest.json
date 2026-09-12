@@ -1,0 +1,19 @@
+{
+  "name": "SalesMate",
+  "short_name": "SalesMate",
+  "description": "مدیریت فروش و استعلام — نسخه موبایل",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#0284c7",
+  "dir": "rtl",
+  "lang": "fa",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
