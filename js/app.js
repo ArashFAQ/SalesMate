@@ -101,8 +101,10 @@ function load() {
 function defaultData() {
   return { invoices: [], balances: {}, inquiries: [], company: 'SalesMate', nextId: 1 };
 }
-function save(data) {
+function save(data, opts) {
+  opts = opts || {};
   localStorage.setItem(KEY, JSON.stringify(data));
+  if (opts.skipCloud) return;
   try { scheduleCloudPush(1200); } catch (e) {}
 }
 let DB = load();
@@ -302,14 +304,20 @@ async function sbFetch(method, path, body, _retried) {
 
 
 let _pushTimer = null;
-let _cloudSynced = false; // تا اولین دریافت از ابر، push خودکار نشود (داده قدیمی موبایل ابر را خراب نکند)
+let _cloudSynced = false;
+let _cloudBusy = false;      // حین pull/push
+let _lastPullAt = 0;         // بعد از pull چند ثانیه push نکن
 function scheduleCloudPush(delayMs) {
   if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
   if (!_cloudSynced) return;
+  if (_cloudBusy) return;
+  // تا ۳۰ ثانیه بعد از دریافت از ابر، push خودکار نکن (جلوگیری از پاک شدن ابر)
+  if (Date.now() - _lastPullAt < 30000) return;
   if (_pushTimer) clearTimeout(_pushTimer);
   _pushTimer = setTimeout(function () {
     _pushTimer = null;
-    if (typeof pushToSupabase !== 'function' || !sbLoggedIn() || !_cloudSynced) return;
+    if (_cloudBusy || !_cloudSynced || !sbLoggedIn()) return;
+    if (Date.now() - _lastPullAt < 30000) return;
     pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
   }, delayMs == null ? 800 : delayMs);
 }
@@ -340,6 +348,9 @@ function toIsoTimestamp(v) {
 
 async function pushToSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
+  if (_cloudBusy) return;
+  _cloudBusy = true;
+  try {
   const uid = sbUser().user_id;
   // پاک‌سازی timestampهای شمسی/نامعتبر در حافظه محلی
   try {
@@ -424,7 +435,10 @@ async function pushToSupabase() {
     if (chunk.length) await sbFetch('POST', '/rest/v1/store_sales', chunk);
   }
   DB.updatedAt = new Date().toISOString().slice(0, 19);
-  save(DB);
+  save(DB, { skipCloud: true });
+  } finally {
+    _cloudBusy = false;
+  }
 }
 
 
@@ -443,6 +457,9 @@ async function autoPullFromCloud(reason) {
 }
 async function pullFromSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
+  if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
+  _cloudBusy = true;
+  try {
   const uid = sbUser().user_id;
   const invs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc') || [];
   const bals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
@@ -509,7 +526,12 @@ async function pullFromSupabase() {
   DB.nextId = DB.invoices.length + 1;
   DB.updatedAt = new Date().toISOString().slice(0, 19);
   _cloudSynced = true;
-  save(DB);
+  _lastPullAt = Date.now();
+  // مهم: بعد از pull دیگر push نکن — وگرنه DELETE+POST ممکن است ابر را خالی کند
+  save(DB, { skipCloud: true });
+  } finally {
+    _cloudBusy = false;
+  }
 }
 
 
@@ -2435,8 +2457,8 @@ document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'hidden') {
     try { tryBackupOnLeave(); } catch(e) {}
   } else if (document.visibilityState === 'visible') {
-    // برگشت به اپ → داده جدید ویندوز/ابر را بگیر
-    if (sbLoggedIn() && navigator.onLine !== false) {
+    // برگشت به اپ → فقط اگر حداقل ۴۵ ثانیه از آخرین pull گذشته
+    if (sbLoggedIn() && navigator.onLine !== false && !_cloudBusy && (Date.now() - _lastPullAt > 45000)) {
       autoPullFromCloud('visible').then(function (ok) {
         if (ok) {
           try {

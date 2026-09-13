@@ -1,4 +1,4 @@
-const CACHE = 'salesmate-mw-v1.25';
+const CACHE = 'salesmate-mw-v1.26';
 const ASSETS = ['./', './index.html', './css/app.css', './js/app.js', './manifest.json', './icon.svg'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
