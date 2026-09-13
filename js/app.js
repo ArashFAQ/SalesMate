@@ -2164,6 +2164,31 @@ function bindStorePage() {
 
 
 function bindPage(page) {
+  if (page === 'home') {
+    const newInv = document.getElementById('homeNewInv');
+    if (newInv) newInv.onclick = function () {
+      go('invoices');
+      setTimeout(function () {
+        try { openInvoiceModal(null); } catch (e) { console.warn(e); }
+      }, 50);
+    };
+    const homeInq = document.getElementById('homeInq');
+    if (homeInq) homeInq.onclick = function () { go('inquiry'); };
+    const homeStore = document.getElementById('homeStore');
+    if (homeStore) homeStore.onclick = function () { go('store'); };
+    const savedInq = document.getElementById('homeSavedInq');
+    if (savedInq) {
+      savedInq.style.cursor = 'pointer';
+      savedInq.onclick = function () {
+        try { showSavedInquiries(); } catch (e) {
+          go('inquiry');
+          setTimeout(function () {
+            try { showSavedInquiries(); } catch (e2) { console.warn(e2); }
+          }, 80);
+        }
+      };
+    }
+  }
   if (page === 'invoices') {
     const s = document.getElementById('invSearch');
     if (s) s.oninput = () => {
