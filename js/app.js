@@ -105,7 +105,7 @@ function save(data, opts) {
   opts = opts || {};
   localStorage.setItem(KEY, JSON.stringify(data));
   if (opts.skipCloud) return;
-  try { scheduleCloudPush(1200); } catch (e) {}
+  try { scheduleCloudPush(500, true); } catch (e) {}
 }
 let DB = load();
 
@@ -305,21 +305,24 @@ async function sbFetch(method, path, body, _retried) {
 
 let _pushTimer = null;
 let _cloudSynced = false;
-let _cloudBusy = false;      // حین pull/push
-let _lastPullAt = 0;         // بعد از pull چند ثانیه push نکن
-function scheduleCloudPush(delayMs) {
+let _cloudBusy = false;
+let _lastPullAt = 0;
+function scheduleCloudPush(delayMs, force) {
   if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
-  if (!_cloudSynced) return;
+  // بعد از لاگین/اولین pull، یا با force بعد از تغییر کاربر
+  if (!_cloudSynced && !force) return;
   if (_cloudBusy) return;
-  // تا ۳۰ ثانیه بعد از دریافت از ابر، push خودکار نکن (جلوگیری از پاک شدن ابر)
-  if (Date.now() - _lastPullAt < 30000) return;
+  // فقط ۲ ثانیه بعد از pull خودکار نکن؛ تغییر کاربر با force رد می‌شود
+  if (!force && Date.now() - _lastPullAt < 2000) return;
   if (_pushTimer) clearTimeout(_pushTimer);
   _pushTimer = setTimeout(function () {
     _pushTimer = null;
-    if (_cloudBusy || !_cloudSynced || !sbLoggedIn()) return;
-    if (Date.now() - _lastPullAt < 30000) return;
+    if (_cloudBusy || !sbLoggedIn()) return;
+    if (!force && !_cloudSynced) return;
+    if (!force && Date.now() - _lastPullAt < 2000) return;
+    _cloudSynced = true;
     pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
-  }, delayMs == null ? 800 : delayMs);
+  }, delayMs == null ? 500 : delayMs);
 }
 
 function toIsoTimestamp(v) {
@@ -1287,8 +1290,8 @@ function renderInquiry() {
       <div class="value">${fmt(total)} ریال</div>
       <div style="margin-top:6px;opacity:.9;font-size:13px">${words(total)} ریال</div>
     </div>
-    <button class="btn btn-primary btn-block" id="iqPdf">تولید PDF</button>
-    <button class="btn btn-primary btn-block" id="iqImg">خروجی تصویر</button>
+    <button class="btn btn-primary btn-block" id="iqPdf">📤 اشتراک / PDF</button>
+    <button class="btn btn-primary btn-block" id="iqImg">📤 اشتراک تصویر</button>
     <button class="btn btn-secondary btn-block" id="iqSave">ذخیره استعلام</button>
     <button class="btn btn-green btn-block" id="iqFinal">✓ تایید نهایی و ثبت حواله</button>
   `;
@@ -1333,128 +1336,196 @@ function openInquiryExport(asImage) {
   const disc = amount(inq.discount);
   const validity = inq.validity || '';
   const shaba = inq.shaba || '';
+  const debtDisp = debt ? fmt(debt) : '۰';
+  const discDisp = disc ? fmt(disc) : '۰';
+  const shabaHtml = shaba
+    ? '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed #cbd5e1;font-size:12px;"><b>شبا:</b> <span style="direction:ltr;display:inline-block">' + esc(shaba) + '</span></div>'
+    : '';
   let headers = [];
   if (tab === 'parquet') headers = ['ردیف','کد کالا','نوع کالا','گرید','مقدار (کارتن)','مقدار (متراژ)','قیمت واحد (ریال)','هزینه کالا (ریال)'];
   else if (tab === 'mdf') headers = ['ردیف','نوع کالا','کد','مقدار (پالت)','مقدار (ورق)','قیمت واحد (ریال)','هزینه کالا (ریال)'];
   else headers = ['ردیف','نوع کالا','سایز','مقدار (پالت)','مقدار (ورق)','قیمت واحد (ریال)','هزینه کالا (ریال)'];
-  const headersHtml = headers.map(h => `<th style="padding:8px 5px;background:#0284c7;color:white;font-weight:600;font-size:11px;text-align:center;border:none;">${h}</th>`).join('');
+  const headersHtml = headers.map(h => '<th style="padding:8px 5px;background:#0284c7;color:white;font-weight:600;font-size:11px;text-align:center;border:none;">' + h + '</th>').join('');
   let rowsHtml = '';
   inq.rows.forEach((r, idx) => {
     const cost = rowCost(r);
-    let cells;
+    let cells = [];
     if (tab === 'parquet') {
-      cells = [fa(idx+1), `<span style="font-size:15px;font-weight:700;">${fa(r.code||'')}</span>`, r.type||'', r.grade||'', fa(r.qty1||''), fa(r.qty2||''), fmt(r.price), fmt(cost)];
+      cells = [fa(idx + 1), esc(r.code || '—'), esc(r.type || ''), esc(r.grade || ''), fa(r.qty1 || '—'), fa(r.qty2 || '—'), fmt(amount(r.price)), fmt(cost)];
     } else if (tab === 'mdf') {
-      cells = [fa(idx+1), r.type||'', `<span style="font-size:15px;font-weight:700;">${fa(r.code||'')}</span>`, fa(r.qty1||''), fa(r.qty2||''), fmt(r.price), fmt(cost)];
+      cells = [fa(idx + 1), esc(r.type || ''), esc(r.code || '—'), fa(r.qty1 || '—'), fa(r.qty2 || '—'), fmt(amount(r.price)), fmt(cost)];
     } else {
-      cells = [fa(idx+1), r.type||'', r.size||'', fa(r.qty1||''), fa(r.qty2||''), fmt(r.price), fmt(cost)];
+      cells = [fa(idx + 1), esc(r.type || ''), esc(r.size || ''), fa(r.qty1 || '—'), fa(r.qty2 || '—'), fmt(amount(r.price)), fmt(cost)];
     }
-    const bg = idx % 2 === 0 ? '#f0f9ff' : '#ffffff';
-    rowsHtml += `<tr style="background:${bg};">` + cells.map(c => `<td style="padding:7px 5px;text-align:center;font-size:12px;border-bottom:1px solid #e0f2fe;">${c}</td>`).join('') + '</tr>';
+    const bg = idx % 2 ? '#f8fafc' : '#fff';
+    rowsHtml += '<tr style="background:' + bg + '">' + cells.map(c => '<td style="padding:7px 5px;text-align:center;font-size:12px;border-bottom:1px solid #e2e8f0;">' + c + '</td>').join('') + '</tr>';
   });
-  const debtDisp = debt ? fmt(debt) : '';
-  const discDisp = disc ? fmt(disc) : '';
-  const shabaHtml = (tab === 'parquet' && shaba) ? `<p style="margin:8px 0 0;font-weight:500;color:#0284c7;">شماره شبا بانک ملت: ${shaba}</p>` : '';
-  const html = `<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<title>استعلام قیمت کالا</title>
-<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
-<style>
-  *{font-family:Vazirmatn,Tahoma,sans-serif!important;box-sizing:border-box;
-    -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  body{margin:0;padding:0;color:#1e293b;font-size:14px;line-height:1.55;background:#fff}
-  table{width:100%;border-collapse:collapse}
-  @media print{
-    @page{size:A4;margin:0}
-    body{padding:0}
-    .no-print{display:none!important}
-  }
-</style>
-</head>
-<body>
-<div class="no-print" style="position:sticky;top:0;z-index:10;background:#0f172a;color:white;padding:10px 16px;
-     display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;">
-  <span style="font-size:13px;">${asImage ? 'برای تصویر: اسکرین‌شات بگیرید یا چاپ → Save as PDF' : 'چاپ → Save as PDF و Background graphics را فعال کنید'}</span>
-  <button onclick="window.print()" style="background:#0284c7;color:white;border:none;padding:8px 18px;border-radius:8px;font-weight:bold;cursor:pointer;">چاپ / ذخیره PDF</button>
-</div>
-<div style="background:#0284c7;color:white;padding:14px 18px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="font-size:18px;font-weight:bold;">استعلام قیمت کالا</div>
-    <div style="font-size:13px;opacity:0.95;">${tabName}</div>
+
+  const inner = `
+<div id="estelamShareRoot" style="width:800px;max-width:100%;margin:0 auto;background:#fff;font-family:Tahoma,Vazirmatn,sans-serif;direction:rtl;color:#0f172a;">
+  <div style="background:#0284c7;color:white;padding:14px 18px;border-radius:14px 14px 0 0;">
+    <div style="font-size:18px;font-weight:800;">استعلام کالا — ${tabName}</div>
+    <div style="font-size:12px;opacity:.9;margin-top:4px;">${esc(DB.company || 'SalesMate')}</div>
   </div>
-</div>
-<div style="padding:14px 16px;">
-  <div style="display:flex;gap:14px;margin-bottom:12px;">
+  <div style="display:flex;gap:10px;padding:12px 0;">
     <div style="flex:1;background:#0284c7;border-radius:12px;padding:14px 16px;color:white;">
-      <div style="font-size:12px;opacity:0.75;margin-bottom:4px;">نام خریدار</div>
-      <div style="font-size:17px;font-weight:bold;">${buyer}</div>
+      <div style="font-size:11px;opacity:.85;">خریدار</div>
+      <div style="font-size:16px;font-weight:800;margin-top:4px;">${esc(buyer)}</div>
     </div>
     <div style="flex:0.7;background:#0284c7;border-radius:12px;padding:14px 16px;color:white;">
-      <div style="font-size:12px;opacity:0.75;margin-bottom:4px;">تاریخ</div>
-      <div style="font-size:17px;font-weight:bold;direction:ltr;text-align:left;">${date}</div>
+      <div style="font-size:11px;opacity:.85;">تاریخ</div>
+      <div style="font-size:16px;font-weight:800;margin-top:4px;direction:ltr;text-align:right;">${date}</div>
     </div>
   </div>
-  <div style="border-radius:12px;overflow:hidden;border:1px solid #bae6fd;margin-bottom:12px;">
-    <table>
-      <thead><tr>${headersHtml}</tr></thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
-  </div>
-  <div style="margin-bottom:12px;">
-    <table style="font-size:11px;">
-      <tr>
-        <td style="padding:6px 10px;background:#f0f9ff;color:#64748b;width:35%;">مبلغ کل اقلام</td>
-        <td style="padding:6px 10px;background:#f0f9ff;text-align:left;direction:ltr;font-weight:600;font-size:15px;">${fmt(sub)}</td>
-      </tr>
-      <tr>
-        <td style="padding:6px 10px;color:#64748b;">هزینه انبارداری</td>
-        <td style="padding:6px 10px;">${warehouse}</td>
-      </tr>
-      <tr>
-        <td style="padding:6px 10px;background:#f0f9ff;color:#64748b;">هزینه حمل</td>
-        <td style="padding:6px 10px;background:#f0f9ff;">${transport}</td>
-      </tr>
-      <tr>
-        <td style="padding:6px 10px;color:#64748b;">بدهی پیشین</td>
-        <td style="padding:6px 10px;text-align:left;direction:ltr;">${debtDisp}</td>
-      </tr>
-      <tr>
-        <td style="padding:6px 10px;background:#f0f9ff;color:#64748b;">تخفیف</td>
-        <td style="padding:6px 10px;background:#f0f9ff;text-align:left;direction:ltr;">${discDisp}</td>
-      </tr>
-    </table>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+    <thead><tr>${headersHtml}</tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div style="background:#f8fafc;border-radius:12px;padding:10px 14px;border:1px solid #e2e8f0;margin-bottom:12px;font-size:12px;">
+    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>مبلغ کل اقلام</span><span style="direction:ltr;font-weight:700;">${fmt(sub)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>انبارداری</span><span>${esc(warehouse)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>حمل</span><span>${esc(transport)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>بدهی پیشین</span><span style="direction:ltr;">${debtDisp}</span></div>
+    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>تخفیف</span><span style="direction:ltr;">${discDisp}</span></div>
   </div>
   <div style="background:#0284c7;border-radius:14px;padding:14px 18px;color:white;margin-bottom:12px;">
     <div style="font-size:13px;opacity:0.8;margin-bottom:6px;">جمع کل قابل پرداخت</div>
     <div style="font-size:24px;font-weight:900;direction:ltr;text-align:left;">${fmt(total)} <span style="font-size:15px;font-weight:500;">ریال</span></div>
-    <div style="font-size:15px;margin-top:8px;opacity:0.9;font-weight:500;">${words(total)} ریال</div>
+    <div style="font-size:14px;margin-top:8px;opacity:0.9;">${words(total)} ریال</div>
   </div>
   <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;border:1px solid #e2e8f0;font-size:11px;color:#475569;line-height:1.6;">
     <div style="font-weight:600;color:#0284c7;margin-bottom:8px;font-size:14px;">شرایط و نکات مهم</div>
     <p style="margin:4px 0;">• پس از واریز مبلغ به حساب شرکت و تأیید واحد حسابداری، حواله خروج بار صادر می‌گردد.</p>
     <p style="margin:4px 0;">• پس از خروج کالا از انبار شرکت هیچ مسئولیتی از لحاظ کمیت و کیفیت/سلامت کالا ندارد.</p>
     <p style="margin:4px 0;">• پس از فروش کالا به هیچ عنوان مرجوعی و ابطال حواله انجام نمی‌شود.</p>
-    <p style="margin:10px 0 4px;font-weight:500;color:#1e293b;">${validity}</p>
+    <p style="margin:10px 0 4px;font-weight:500;color:#1e293b;">${esc(validity)}</p>
     ${shabaHtml}
   </div>
-</div>
-<script>
-  // چاپ خودکار غیرفعال — فقط با دکمه چاپ/PDF
-</script>
-</body>
-</html>`;
-  try {
-    saveInquirySmart(JSON.parse(JSON.stringify(inq)), total);
-  } catch(e) {}
-  const w = window.open('', '_blank', 'width=900,height=1000');
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-  } else {
-    alert('پنجره مسدود شد. اجازه پاپ‌آپ مرورگر را بدهید.');
+</div>`;
+
+  try { saveInquirySmart(JSON.parse(JSON.stringify(inq)), total); } catch (e) {}
+
+  shareInquiryFile(inner, asImage, buyer, total).catch(function (err) {
+    console.error(err);
+    alert('اشتراک‌گذاری انجام نشد: ' + (err && err.message ? err.message : err));
+  });
+}
+
+function loadScriptOnce(src) {
+  return new Promise(function (resolve, reject) {
+    if (document.querySelector('script[data-src="' + src + '"]')) {
+      resolve();
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.setAttribute('data-src', src);
+    s.onload = function () { resolve(); };
+    s.onerror = function () { reject(new Error('بارگذاری کتابخانه ناموفق: ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+
+async function shareInquiryFile(innerHtml, asImage, buyer, total) {
+  // هاست موقت خارج صفحه برای رندر
+  var host = document.getElementById('estelamRenderHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'estelamRenderHost';
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:#fff;z-index:-1;';
+    document.body.appendChild(host);
   }
+  host.innerHTML = innerHtml;
+  var root = host.querySelector('#estelamShareRoot') || host.firstElementChild;
+
+  await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+  if (!asImage) {
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+  }
+
+  var canvas = await window.html2canvas(root, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#ffffff',
+    logging: false
+  });
+
+  var safeName = String(buyer || 'estelam').replace(/[^\w\u0600-\u06FF\-]+/g, '_').slice(0, 40);
+  var fileName, file, mime;
+
+  if (asImage) {
+    mime = 'image/png';
+    fileName = 'estelam_' + safeName + '.png';
+    var blob = await new Promise(function (res) { canvas.toBlob(res, 'image/png'); });
+    if (!blob) throw new Error('ساخت تصویر ناموفق بود');
+    file = new File([blob], fileName, { type: mime });
+  } else {
+    mime = 'application/pdf';
+    fileName = 'estelam_' + safeName + '.pdf';
+    var jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+    if (!jsPDF) throw new Error('کتابخانه PDF لود نشد');
+    var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    var pageW = pdf.internal.pageSize.getWidth();
+    var pageH = pdf.internal.pageSize.getHeight();
+    var imgW = pageW - 10;
+    var imgH = canvas.height * imgW / canvas.width;
+    var y = 5;
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    if (imgH <= pageH - 10) {
+      pdf.addImage(dataUrl, 'JPEG', 5, y, imgW, imgH);
+    } else {
+      // چندصفحه‌ای
+      var s = imgW / canvas.width;
+      var pageCanvasH = (pageH - 10) / s;
+      var offset = 0;
+      var first = true;
+      while (offset < canvas.height) {
+        if (!first) pdf.addPage();
+        first = false;
+        var slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = Math.min(pageCanvasH, canvas.height - offset);
+        var ctx = slice.getContext('2d');
+        ctx.drawImage(canvas, 0, offset, slice.width, slice.height, 0, 0, slice.width, slice.height);
+        var sliceH = slice.height * s;
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 5, 5, imgW, sliceH);
+        offset += pageCanvasH;
+      }
+    }
+    var pdfBlob = pdf.output('blob');
+    file = new File([pdfBlob], fileName, { type: mime });
+  }
+
+  var shareData = {
+    files: [file],
+    title: 'استعلام ' + (buyer || ''),
+    text: 'استعلام کالا — جمع کل: ' + fmt(total) + ' ریال'
+  };
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share(shareData);
+    return;
+  }
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+    }
+  }
+
+  // fallback: دانلود
+  var url = URL.createObjectURL(file);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  alert('اشتراک مستقیم در این مرورگر پشتیبانی نشد؛ فایل دانلود شد. می‌توانید از گالری/فایل‌ها برای ارسال استفاده کنید.');
 }
 
 
@@ -1488,7 +1559,7 @@ function saveInquirySmart(snapshot, total) {
   DB.inquiries.unshift(data);
   DB.inquiries = DB.inquiries.slice(0, 50);
   save(DB);
-  try { if (typeof scheduleCloudPush === 'function') scheduleCloudPush(400); } catch (e) {}
+  try { if (typeof scheduleCloudPush === 'function') scheduleCloudPush(400, true); } catch (e) {}
   return true;
 }
 
@@ -2300,6 +2371,7 @@ function bindPage(page) {
         btnLogin.textContent = 'در حال ورود...';
         await sbLogin(email, pass);
         document.getElementById('sbPass').value = '';
+        _cloudSynced = true;
         try {
           await pullFromSupabase();
           _cloudSynced = true;
@@ -2428,6 +2500,7 @@ try {
 // با باز شدن اپ: اگر لاگین است از ابر بگیر (داده ویندوز بیاید)
 (function bootCloudSync() {
   if (!sbLoggedIn()) return;
+  _cloudSynced = true;
   var app = document.getElementById('app');
   var banner = document.createElement('div');
   banner.id = 'syncBanner';
