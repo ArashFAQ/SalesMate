@@ -1428,28 +1428,78 @@ function loadScriptOnce(src) {
 }
 
 async function shareInquiryFile(innerHtml, asImage, buyer, total) {
-  // هاست موقت خارج صفحه برای رندر
+  // هاست رندر: باید داخل viewport باشد و visibility مخفی نباشد
+  // (left:-10000 باعث خطای "cloned iframe" در html2canvas می‌شود)
   var host = document.getElementById('estelamRenderHost');
   if (!host) {
     host = document.createElement('div');
     host.id = 'estelamRenderHost';
-    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:#fff;z-index:-1;';
     document.body.appendChild(host);
   }
+  host.style.cssText = [
+    'position:fixed',
+    'top:0',
+    'left:0',
+    'width:800px',
+    'max-width:100vw',
+    'background:#ffffff',
+    'z-index:2147483646',
+    'opacity:0.01',
+    'pointer-events:none',
+    'overflow:visible',
+    'padding:0',
+    'margin:0'
+  ].join(';');
   host.innerHTML = innerHtml;
   var root = host.querySelector('#estelamShareRoot') || host.firstElementChild;
+  if (!root) throw new Error('محتوای استعلام ساخته نشد');
+
+  // صبر برای layout و فونت
+  await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+  } catch (e) {}
 
   await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
+  if (!window.html2canvas) throw new Error('html2canvas لود نشد — اینترنت را چک کنید');
   if (!asImage) {
     await loadScriptOnce('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
   }
 
-  var canvas = await window.html2canvas(root, {
-    scale: 2,
-    useCORS: true,
-    backgroundColor: '#ffffff',
-    logging: false
-  });
+  var canvas;
+  try {
+    canvas = await window.html2canvas(root, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      foreignObjectRendering: false,
+      removeContainer: true,
+      windowWidth: Math.max(root.scrollWidth, 800),
+      windowHeight: Math.max(root.scrollHeight, 600),
+      scrollX: 0,
+      scrollY: 0,
+      x: 0,
+      y: 0
+    });
+  } catch (e1) {
+    // تلاش دوم با تنظیمات ساده‌تر
+    canvas = await window.html2canvas(root, {
+      scale: 1.5,
+      backgroundColor: '#ffffff',
+      logging: false,
+      foreignObjectRendering: false,
+      useCORS: true
+    });
+  }
+
+  // مخفی کردن هاست
+  host.style.left = '-9999px';
+  host.style.opacity = '0';
+  host.innerHTML = '';
+
+  if (!canvas || !canvas.width) throw new Error('رندر تصویر ناموفق بود');
 
   var safeName = String(buyer || 'estelam').replace(/[^\w\u0600-\u06FF\-]+/g, '_').slice(0, 40);
   var fileName, file, mime;
@@ -1464,18 +1514,16 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
     mime = 'application/pdf';
     fileName = 'estelam_' + safeName + '.pdf';
     var jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
-    if (!jsPDF) throw new Error('کتابخانه PDF لود نشد');
+    if (!jsPDF) throw new Error('کتابخانه PDF لود نشد — اینترنت را چک کنید');
     var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     var pageW = pdf.internal.pageSize.getWidth();
     var pageH = pdf.internal.pageSize.getHeight();
     var imgW = pageW - 10;
     var imgH = canvas.height * imgW / canvas.width;
-    var y = 5;
     var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     if (imgH <= pageH - 10) {
-      pdf.addImage(dataUrl, 'JPEG', 5, y, imgW, imgH);
+      pdf.addImage(dataUrl, 'JPEG', 5, 5, imgW, imgH);
     } else {
-      // چندصفحه‌ای
       var s = imgW / canvas.width;
       var pageCanvasH = (pageH - 10) / s;
       var offset = 0;
@@ -1485,8 +1533,10 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
         first = false;
         var slice = document.createElement('canvas');
         slice.width = canvas.width;
-        slice.height = Math.min(pageCanvasH, canvas.height - offset);
+        slice.height = Math.min(Math.ceil(pageCanvasH), canvas.height - offset);
         var ctx = slice.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, slice.width, slice.height);
         ctx.drawImage(canvas, 0, offset, slice.width, slice.height, 0, 0, slice.width, slice.height);
         var sliceH = slice.height * s;
         pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 5, 5, imgW, sliceH);
@@ -1503,17 +1553,21 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
     text: 'استعلام کالا — جمع کل: ' + fmt(total) + ' ریال'
   };
 
-  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share(shareData);
-    return;
-  }
-  if (navigator.share) {
-    try {
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share(shareData);
       return;
-    } catch (e) {
-      if (e && e.name === 'AbortError') return;
     }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
   }
 
   // fallback: دانلود
@@ -1525,7 +1579,7 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
   a.click();
   a.remove();
   setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-  alert('اشتراک مستقیم در این مرورگر پشتیبانی نشد؛ فایل دانلود شد. می‌توانید از گالری/فایل‌ها برای ارسال استفاده کنید.');
+  alert('اشتراک مستقیم در این مرورگر پشتیبانی نشد؛ فایل دانلود شد.');
 }
 
 
