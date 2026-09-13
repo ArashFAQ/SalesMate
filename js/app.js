@@ -311,9 +311,49 @@ function scheduleCloudPush(delayMs) {
     pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
   }, delayMs == null ? 800 : delayMs);
 }
+
+function toIsoTimestamp(v) {
+  if (v == null || v === '') return new Date().toISOString();
+  var s = String(v).trim();
+  // Persian digits -> English
+  s = s.replace(/[۰-۹]/g, function(d) { return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); });
+  // already ISO
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    var d0 = new Date(s);
+    if (!isNaN(d0.getTime())) return d0.toISOString();
+  }
+  // epoch
+  if (/^\d{10,13}$/.test(s)) {
+    var n = Number(s);
+    return new Date(n < 1e12 ? n * 1000 : n).toISOString();
+  }
+  // Jalali-like or locale with slash/comma → discard
+  if (/\d{4}\/\d{1,2}\/\d{1,2}/.test(s) || s.indexOf('،') >= 0 || /[^\x00-\x7F]/.test(s)) {
+    return new Date().toISOString();
+  }
+  var d = new Date(s);
+  if (!isNaN(d.getTime())) return d.toISOString();
+  return new Date().toISOString();
+}
+
 async function pushToSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   const uid = sbUser().user_id;
+  // پاک‌سازی timestampهای شمسی/نامعتبر در حافظه محلی
+  try {
+    (DB.invoices || []).forEach(function (inv) {
+      inv.createdAt = toIsoTimestamp(inv.createdAt || inv.created_at);
+    });
+    (DB.inquiries || []).forEach(function (item) {
+      if (item && typeof item === 'object') {
+        item.savedAt = toIsoTimestamp(item.savedAt || item.createdAt);
+        item.createdAt = toIsoTimestamp(item.createdAt || item.savedAt);
+      }
+    });
+    (DB.storeSales || []).forEach(function (s) {
+      s.createdAt = toIsoTimestamp(s.createdAt || s.created_at);
+    });
+  } catch (e) {}
   await sbFetch('DELETE', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid));
   try {
     await sbFetch('DELETE', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid));
@@ -325,7 +365,7 @@ async function pushToSupabase() {
     time: inv.time || '',
     total: String(inv.total || '0'),
     paid_amount: String(inv.paidAmount != null ? inv.paidAmount : ''),
-    created_at: inv.createdAt || new Date().toISOString(),
+    created_at: toIsoTimestamp(inv.createdAt || inv.created_at),
     inquiry_data: inv.inquiryData || '',
     image_path: inv.imagePath || '',
     user_id: uid
@@ -350,7 +390,7 @@ async function pushToSupabase() {
   const inqRows = (DB.inquiries || []).filter(x => x && typeof x === 'object').map(item => ({
     payload: item,
     user_id: uid,
-    created_at: (function(v){ v=String(v||''); if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(v)) return v; return new Date().toISOString(); })(item.createdAt || item.savedAt)
+    created_at: toIsoTimestamp(item.createdAt || item.savedAt)
   }));
   for (let i = 0; i < inqRows.length; i += 50) {
     const chunk = inqRows.slice(i, i + 50);
@@ -374,7 +414,7 @@ async function pushToSupabase() {
       total: String(s.total || '0'),
       tab: s.tab || 'parquet',
       items_json: itemsJson,
-      created_at: s.createdAt || s.created_at || new Date().toISOString()
+      created_at: toIsoTimestamp(s.createdAt || s.created_at)
     };
   });
   for (let i = 0; i < storeRows.length; i += 50) {
