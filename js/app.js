@@ -302,12 +302,14 @@ async function sbFetch(method, path, body, _retried) {
 
 
 let _pushTimer = null;
+let _cloudSynced = false; // تا اولین دریافت از ابر، push خودکار نشود (داده قدیمی موبایل ابر را خراب نکند)
 function scheduleCloudPush(delayMs) {
   if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
+  if (!_cloudSynced) return;
   if (_pushTimer) clearTimeout(_pushTimer);
   _pushTimer = setTimeout(function () {
     _pushTimer = null;
-    if (typeof pushToSupabase !== 'function' || !sbLoggedIn()) return;
+    if (typeof pushToSupabase !== 'function' || !sbLoggedIn() || !_cloudSynced) return;
     pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
   }, delayMs == null ? 800 : delayMs);
 }
@@ -425,6 +427,20 @@ async function pushToSupabase() {
   save(DB);
 }
 
+
+async function autoPullFromCloud(reason) {
+  if (!sbLoggedIn()) return false;
+  if (navigator.onLine === false) return false;
+  try {
+    await pullFromSupabase();
+    _cloudSynced = true;
+    return true;
+  } catch (e) {
+    console.warn('auto pull', reason, e);
+    // اگر قبلاً sync بوده، اجازه push بده؛ وگرنه نه
+    return false;
+  }
+}
 async function pullFromSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   const uid = sbUser().user_id;
@@ -492,6 +508,7 @@ async function pullFromSupabase() {
   DB.storeNextId = (DB.storeSales.length || 0) + 1;
   DB.nextId = DB.invoices.length + 1;
   DB.updatedAt = new Date().toISOString().slice(0, 19);
+  _cloudSynced = true;
   save(DB);
 }
 
@@ -2261,8 +2278,15 @@ function bindPage(page) {
         btnLogin.textContent = 'در حال ورود...';
         await sbLogin(email, pass);
         document.getElementById('sbPass').value = '';
+        try {
+          await pullFromSupabase();
+          _cloudSynced = true;
+        } catch (pe) {
+          console.warn(pe);
+        }
         refreshSbStatus();
-        alert('با موفقیت وارد شدید');
+        alert('با موفقیت وارد شدید — داده ابر دریافت شد');
+        go('home');
       } catch (e) {
         alert('خطا ورود: ' + e.message);
       } finally {
@@ -2298,6 +2322,7 @@ function bindPage(page) {
       try {
         sbPull.textContent = 'در حال دریافت...';
         await pullFromSupabase();
+        _cloudSynced = true;
         const nStore = (DB.storeSales || []).length;
         alert('داده حساب شما از ابر دریافت شد\nتعداد فروشگاه: ' + nStore);
         go('home');
@@ -2377,6 +2402,25 @@ try {
   if (app) app.innerHTML = '<div class="card" style="color:#b91c1c"><b>خطای اجرا:</b><br>' + (err && err.message ? err.message : err) + '</div>';
   console.error(err);
 }
+
+// با باز شدن اپ: اگر لاگین است از ابر بگیر (داده ویندوز بیاید)
+(function bootCloudSync() {
+  if (!sbLoggedIn()) return;
+  var app = document.getElementById('app');
+  var banner = document.createElement('div');
+  banner.id = 'syncBanner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#0284c7;color:#fff;text-align:center;padding:8px;font-size:13px;font-family:Vazirmatn,Tahoma,sans-serif;';
+  banner.textContent = 'در حال دریافت داده از ابر...';
+  document.body.appendChild(banner);
+  autoPullFromCloud('boot').then(function (ok) {
+    banner.textContent = ok ? 'داده ابر به‌روز شد' : 'دریافت از ابر ناموفق — داده محلی';
+    banner.style.background = ok ? '#059669' : '#b45309';
+    if (ok) {
+      try { go(document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.page : 'home'); } catch (e) { go('home'); }
+    }
+    setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 1800);
+  });
+})();
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
   navigator.serviceWorker.register('./sw.js').catch(function () {});
 }
@@ -2390,6 +2434,18 @@ window.addEventListener('pagehide', function () {
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'hidden') {
     try { tryBackupOnLeave(); } catch(e) {}
+  } else if (document.visibilityState === 'visible') {
+    // برگشت به اپ → داده جدید ویندوز/ابر را بگیر
+    if (sbLoggedIn() && navigator.onLine !== false) {
+      autoPullFromCloud('visible').then(function (ok) {
+        if (ok) {
+          try {
+            var active = document.querySelector('.nav-btn.active');
+            go(active ? active.dataset.page : 'home');
+          } catch (e) {}
+        }
+      });
+    }
   }
 });
 window.addEventListener('beforeunload', function (e) {
