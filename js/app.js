@@ -103,6 +103,7 @@ function defaultData() {
 }
 function save(data) {
   localStorage.setItem(KEY, JSON.stringify(data));
+  try { scheduleCloudPush(1200); } catch (e) {}
 }
 let DB = load();
 
@@ -148,23 +149,114 @@ async function isOnlineQuick() {
 }
 
 let _backupClosing = false;
+let _pushTimer = null;
+let _lastPushAt = 0;
+
+function scheduleCloudPush(delayMs) {
+  if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
+  if (_pushTimer) clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(function () {
+    _pushTimer = null;
+    if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
+    pushToSupabase()
+      .then(function () { _lastPushAt = Date.now(); })
+      .catch(function (e) { console.warn('cloud push', e && e.message ? e.message : e); });
+  }, delayMs == null ? 800 : delayMs);
+}
+
 async function tryBackupOnLeave() {
   if (_backupClosing) return;
   if (!backupOnCloseEnabled()) return;
   if (!sbLoggedIn()) return;
   _backupClosing = true;
   try {
-    const online = await isOnlineQuick();
-    if (!online) {
-      // best-effort message (browsers limit dialogs on unload)
-      try { alert('آفلاین هستید؛ پشتیبان ابری انجام نشد.'); } catch(e) {}
-      return;
-    }
-    await pushToSupabase();
-  } catch(e) {
-    try { alert('پشتیبان ابری انجام نشد: ' + (e.message || e)); } catch(err) {}
+    if (navigator.onLine === false) return;
+    if (Date.now() - _lastPushAt < 20000) return;
+    await pushToSupabaseKeepalive();
+    _lastPushAt = Date.now();
+  } catch (e) {
+    try { console.warn('backup on leave failed', e); } catch (err) {}
   } finally {
     _backupClosing = false;
+  }
+}
+
+async function pushToSupabaseKeepalive() {
+  if (!sbLoggedIn()) return;
+  try { await sbRefreshSession(false); } catch (e) {}
+  const uid = sbUser().user_id;
+  const sess = sbUser();
+  const headers = {
+    apikey: SUPABASE_KEY,
+    Authorization: 'Bearer ' + sess.access_token,
+    'Content-Type': 'application/json',
+    Prefer: 'return=minimal'
+  };
+  async function req(method, path, body) {
+    const opts = { method: method, headers: headers, keepalive: true };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(SUPABASE_URL + path, opts);
+    if (!res.ok) {
+      const t = await res.text().catch(function () { return ''; });
+      throw new Error(t || ('HTTP ' + res.status));
+    }
+  }
+  await req('DELETE', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid));
+  try { await req('DELETE', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
+  try { await req('DELETE', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
+  try { await req('DELETE', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
+
+  const invRows = (DB.invoices || []).map(function (inv) {
+    return {
+      customer: inv.customer || '',
+      invoice_no: inv.invoiceNo || '',
+      date: inv.date || '',
+      time: inv.time || '',
+      total: String(inv.total || '0'),
+      paid_amount: String(inv.paidAmount != null ? inv.paidAmount : ''),
+      created_at: inv.createdAt || new Date().toISOString(),
+      inquiry_data: inv.inquiryData || '',
+      image_path: inv.imagePath || '',
+      user_id: uid
+    };
+  });
+  for (let i = 0; i < invRows.length; i += 40) {
+    var chunk = invRows.slice(i, i + 40);
+    if (chunk.length) await req('POST', '/rest/v1/invoices', chunk);
+  }
+  const bals = Object.entries(DB.balances || {}).filter(function (x) { return x[0]; }).map(function (x) {
+    return { customer: x[0], adjustment: String(x[1]), note: '', updated_at: new Date().toISOString(), user_id: uid };
+  });
+  if (bals.length) await req('POST', '/rest/v1/customer_balances', bals);
+
+  const inqRows = (DB.inquiries || []).filter(function (x) { return x && typeof x === 'object'; }).map(function (item) {
+    return {
+      payload: item,
+      user_id: uid,
+      created_at: (item.savedAt && String(item.savedAt).indexOf('T') >= 0) ? item.savedAt : (item.createdAt || new Date().toISOString())
+    };
+  });
+  for (let i = 0; i < inqRows.length; i += 20) {
+    var chunk2 = inqRows.slice(i, i + 20);
+    if (chunk2.length) await req('POST', '/rest/v1/inquiries', chunk2);
+  }
+
+  const storeRows = (DB.storeSales || []).map(function (s) {
+    return {
+      user_id: uid,
+      customer: s.customer || '',
+      invoice_no: s.invoiceNo || '',
+      date: s.date || '',
+      time: s.time || '',
+      total: String(s.total || '0'),
+      tab: s.tab || 'parquet',
+      items_json: JSON.stringify(s.items || []),
+      created_at: s.createdAt || new Date().toISOString()
+    };
+  });
+  for (let i = 0; i < storeRows.length; i += 40) {
+    var chunk3 = storeRows.slice(i, i + 40);
+    if (chunk3.length) await req('POST', '/rest/v1/store_sales', chunk3);
   }
 }
 
@@ -334,11 +426,15 @@ async function pushToSupabase() {
   if (bals.length) await sbFetch('POST', '/rest/v1/customer_balances', bals);
   try {
     await sbFetch('DELETE', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid));
-  } catch(e) {}
+  } catch (e) {
+    console.warn('inquiries delete', e);
+  }
   const inqRows = (DB.inquiries || []).filter(x => x && typeof x === 'object').map(item => ({
     payload: item,
     user_id: uid,
-    created_at: item.savedAt || item.createdAt || new Date().toISOString()
+    created_at: (item.savedAt && String(item.savedAt).indexOf('T') >= 0)
+      ? item.savedAt
+      : (item.createdAt || new Date().toISOString())
   }));
   for (let i = 0; i < inqRows.length; i += 50) {
     const chunk = inqRows.slice(i, i + 50);
@@ -1334,6 +1430,7 @@ function saveInquirySmart(snapshot, total) {
   DB.inquiries.unshift(data);
   DB.inquiries = DB.inquiries.slice(0, 50);
   save(DB);
+  scheduleCloudPush(400);
   return true;
 }
 
@@ -1850,7 +1947,7 @@ function bindStorePage() {
     }
     save(DB);
     storeForm = { tab: storeForm.tab, buyer:'', invoiceNo:'', date: nj.date, rows:[storeEmptyRow()], editingId: null };
-    try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
+    try { scheduleCloudPush(600); } catch(e) {}
     go('store');
     alert('ثبت شد');
   };
@@ -1876,7 +1973,7 @@ function bindStorePage() {
       const id = +b.dataset.stDel;
       DB.storeSales = (DB.storeSales || []).filter(x => x.id !== id);
       save(DB);
-      try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
+      try { scheduleCloudPush(600); } catch(e) {}
       go('store');
     };
   });
@@ -2242,20 +2339,35 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
   navigator.serviceWorker.register('./sw.js').catch(function () {});
 }
 
-// پشتیبان هنگام بستن / ترک صفحه (مثل ویندوز)
+// پشتیبان خودکار هر ۹۰ ثانیه وقتی صفحه باز است
+if (!window.__smAutoBackupTimer) {
+  window.__smAutoBackupTimer = setInterval(function () {
+    if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
+    if (navigator.onLine === false) return;
+    pushToSupabase()
+      .then(function () { _lastPushAt = Date.now(); })
+      .catch(function (e) { console.warn('auto backup', e); });
+  }, 90 * 1000);
+}
+
+// پشتیبان هنگام بستن / مخفی شدن تب (keepalive)
 window.addEventListener('pagehide', function () {
   if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-  // sendBeacon-style: try sync push (async may be killed; still best effort)
-  try { tryBackupOnLeave(); } catch(e) {}
+  try { tryBackupOnLeave(); } catch (e) {}
 });
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'hidden') {
-    try { tryBackupOnLeave(); } catch(e) {}
+    if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
+    try { tryBackupOnLeave(); } catch (e) {}
   }
 });
-window.addEventListener('beforeunload', function (e) {
-  // اگر آفلاین و لاگین و تیک فعال: هشدار (مرورگر متن سفارشی را اغلب نشان نمی‌دهد)
+window.addEventListener('freeze', function () {
   if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
+  try { tryBackupOnLeave(); } catch (e) {}
+});
+window.addEventListener('beforeunload', function (e) {
+  if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
+  try { tryBackupOnLeave(); } catch (err) {}
   if (navigator.onLine === false) {
     e.preventDefault();
     e.returnValue = '';
