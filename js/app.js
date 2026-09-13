@@ -149,114 +149,23 @@ async function isOnlineQuick() {
 }
 
 let _backupClosing = false;
-let _pushTimer = null;
-let _lastPushAt = 0;
-
-function scheduleCloudPush(delayMs) {
-  if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
-  if (_pushTimer) clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(function () {
-    _pushTimer = null;
-    if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
-    pushToSupabase()
-      .then(function () { _lastPushAt = Date.now(); })
-      .catch(function (e) { console.warn('cloud push', e && e.message ? e.message : e); });
-  }, delayMs == null ? 800 : delayMs);
-}
-
 async function tryBackupOnLeave() {
   if (_backupClosing) return;
   if (!backupOnCloseEnabled()) return;
   if (!sbLoggedIn()) return;
   _backupClosing = true;
   try {
-    if (navigator.onLine === false) return;
-    if (Date.now() - _lastPushAt < 20000) return;
-    await pushToSupabaseKeepalive();
-    _lastPushAt = Date.now();
-  } catch (e) {
-    try { console.warn('backup on leave failed', e); } catch (err) {}
+    const online = await isOnlineQuick();
+    if (!online) {
+      // best-effort message (browsers limit dialogs on unload)
+      try { alert('آفلاین هستید؛ پشتیبان ابری انجام نشد.'); } catch(e) {}
+      return;
+    }
+    await pushToSupabase();
+  } catch(e) {
+    try { alert('پشتیبان ابری انجام نشد: ' + (e.message || e)); } catch(err) {}
   } finally {
     _backupClosing = false;
-  }
-}
-
-async function pushToSupabaseKeepalive() {
-  if (!sbLoggedIn()) return;
-  try { await sbRefreshSession(false); } catch (e) {}
-  const uid = sbUser().user_id;
-  const sess = sbUser();
-  const headers = {
-    apikey: SUPABASE_KEY,
-    Authorization: 'Bearer ' + sess.access_token,
-    'Content-Type': 'application/json',
-    Prefer: 'return=minimal'
-  };
-  async function req(method, path, body) {
-    const opts = { method: method, headers: headers, keepalive: true };
-    if (body !== undefined) opts.body = JSON.stringify(body);
-    const res = await fetch(SUPABASE_URL + path, opts);
-    if (!res.ok) {
-      const t = await res.text().catch(function () { return ''; });
-      throw new Error(t || ('HTTP ' + res.status));
-    }
-  }
-  await req('DELETE', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid));
-  try { await req('DELETE', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
-  try { await req('DELETE', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
-  try { await req('DELETE', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid)); } catch (e) {}
-
-  const invRows = (DB.invoices || []).map(function (inv) {
-    return {
-      customer: inv.customer || '',
-      invoice_no: inv.invoiceNo || '',
-      date: inv.date || '',
-      time: inv.time || '',
-      total: String(inv.total || '0'),
-      paid_amount: String(inv.paidAmount != null ? inv.paidAmount : ''),
-      created_at: inv.createdAt || new Date().toISOString(),
-      inquiry_data: inv.inquiryData || '',
-      image_path: inv.imagePath || '',
-      user_id: uid
-    };
-  });
-  for (let i = 0; i < invRows.length; i += 40) {
-    var chunk = invRows.slice(i, i + 40);
-    if (chunk.length) await req('POST', '/rest/v1/invoices', chunk);
-  }
-  const bals = Object.entries(DB.balances || {}).filter(function (x) { return x[0]; }).map(function (x) {
-    return { customer: x[0], adjustment: String(x[1]), note: '', updated_at: new Date().toISOString(), user_id: uid };
-  });
-  if (bals.length) await req('POST', '/rest/v1/customer_balances', bals);
-
-  const inqRows = (DB.inquiries || []).filter(function (x) { return x && typeof x === 'object'; }).map(function (item) {
-    return {
-      payload: item,
-      user_id: uid,
-      created_at: (item.savedAt && String(item.savedAt).indexOf('T') >= 0) ? item.savedAt : (item.createdAt || new Date().toISOString())
-    };
-  });
-  for (let i = 0; i < inqRows.length; i += 20) {
-    var chunk2 = inqRows.slice(i, i + 20);
-    if (chunk2.length) await req('POST', '/rest/v1/inquiries', chunk2);
-  }
-
-  const storeRows = (DB.storeSales || []).map(function (s) {
-    return {
-      user_id: uid,
-      customer: s.customer || '',
-      invoice_no: s.invoiceNo || '',
-      date: s.date || '',
-      time: s.time || '',
-      total: String(s.total || '0'),
-      tab: s.tab || 'parquet',
-      items_json: JSON.stringify(s.items || []),
-      created_at: s.createdAt || new Date().toISOString()
-    };
-  });
-  for (let i = 0; i < storeRows.length; i += 40) {
-    var chunk3 = storeRows.slice(i, i + 40);
-    if (chunk3.length) await req('POST', '/rest/v1/store_sales', chunk3);
   }
 }
 
@@ -391,6 +300,17 @@ async function sbFetch(method, path, body, _retried) {
   return data;
 }
 
+
+let _pushTimer = null;
+function scheduleCloudPush(delayMs) {
+  if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
+  if (_pushTimer) clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(function () {
+    _pushTimer = null;
+    if (typeof pushToSupabase !== 'function' || !sbLoggedIn()) return;
+    pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
+  }, delayMs == null ? 800 : delayMs);
+}
 async function pushToSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   const uid = sbUser().user_id;
@@ -426,15 +346,11 @@ async function pushToSupabase() {
   if (bals.length) await sbFetch('POST', '/rest/v1/customer_balances', bals);
   try {
     await sbFetch('DELETE', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid));
-  } catch (e) {
-    console.warn('inquiries delete', e);
-  }
+  } catch(e) {}
   const inqRows = (DB.inquiries || []).filter(x => x && typeof x === 'object').map(item => ({
     payload: item,
     user_id: uid,
-    created_at: (item.savedAt && String(item.savedAt).indexOf('T') >= 0)
-      ? item.savedAt
-      : (item.createdAt || new Date().toISOString())
+    created_at: (function(v){ v=String(v||''); if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(v)) return v; return new Date().toISOString(); })(item.createdAt || item.savedAt)
   }));
   for (let i = 0; i < inqRows.length; i += 50) {
     const chunk = inqRows.slice(i, i + 50);
@@ -606,7 +522,50 @@ function customerBalance(name) {
   return bal;
 }
 function customerNames() {
-  return [...new Set(DB.invoices.map(i => i.customer).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fa'));
+  const set = new Set();
+  (DB.invoices || []).forEach(i => {
+    const n = (i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  (DB.inquiries || []).forEach(i => {
+    const n = String(i.buyer || i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  (DB.storeSales || []).forEach(i => {
+    const n = (i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  return [...set].sort((a, b) => a.localeCompare(b, 'fa'));
+}
+
+function refreshIqCustSuggestions(query) {
+  const scroll = document.getElementById('iqCustScroll');
+  const list = document.getElementById('custList');
+  if (!scroll && !list) return;
+  const q = String(query || '').trim();
+  const names = customerNames().filter(n => !q || n.indexOf(q) >= 0 || n.replace(/\s/g, '').indexOf(q.replace(/\s/g, '')) >= 0);
+  if (list) {
+    list.innerHTML = names.map(n => '<option value="' + esc(n) + '">').join('');
+  }
+  if (scroll) {
+    if (!names.length) {
+      scroll.innerHTML = '<span class="muted">مشتری‌ای پیدا نشد — نام جدید تایپ کنید</span>';
+    } else {
+      scroll.innerHTML = names.slice(0, 40).map(n => {
+        const b = customerBalance(n);
+        const col = b > 0 ? '#dc2626' : b < 0 ? '#16a34a' : '#64748b';
+        return '<button type="button" class="cust-chip" data-iqpick="' + esc(n) + '" style="border-color:' + col + ';color:' + col + '">' + esc(n) + '</button>';
+      }).join('');
+    }
+    scroll.querySelectorAll('[data-iqpick]').forEach(b => {
+      b.onclick = () => {
+        const el = document.getElementById('iqBuyer');
+        if (el) el.value = b.dataset.iqpick;
+        inq.buyer = b.dataset.iqpick;
+        refreshIqCustSuggestions(b.dataset.iqpick);
+      };
+    });
+  }
 }
 
 function nowJalali() {
@@ -690,7 +649,17 @@ const titles = {
   customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', settings: 'تنظیمات'
 };
 
-function go(page) {
+function go(page, opts) {
+  opts = opts || {};
+  const keepScroll = !!opts.keepScroll;
+  const _sy = keepScroll ? window.scrollY : 0;
+  const _ae = document.activeElement;
+  let _fs = null;
+  if (keepScroll && _ae) {
+    if (_ae.id) _fs = '#' + _ae.id;
+    else if (_ae.dataset && _ae.dataset.r != null)
+      _fs = '[data-r="' + _ae.dataset.r + '"][data-f="' + _ae.dataset.f + '"]';
+  }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const app = document.getElementById('app');
@@ -702,7 +671,17 @@ function go(page) {
   else if (page === 'store') app.innerHTML = renderStore();
   else if (page === 'settings') app.innerHTML = renderSettings();
   bindPage(page);
-  window.scrollTo(0, 0);
+  if (keepScroll) {
+    window.scrollTo(0, _sy);
+    if (_fs) {
+      const el = document.querySelector(_fs);
+      if (el) {
+        try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+      }
+    }
+  } else {
+    window.scrollTo(0, 0);
+  }
 }
 
 /* ---------- HOME ---------- */
@@ -1419,7 +1398,7 @@ function inquiryFingerprint(item) {
 
 function saveInquirySmart(snapshot, total) {
   DB.inquiries = DB.inquiries || [];
-  const data = { ...snapshot, total: total, savedAt: new Date().toLocaleString('fa-IR') };
+  const data = { ...snapshot, total: total, savedAt: new Date().toISOString() };
   const fp = inquiryFingerprint(data);
   const exist = DB.inquiries.find(x => inquiryFingerprint(x) === fp);
   if (exist) {
@@ -1430,7 +1409,7 @@ function saveInquirySmart(snapshot, total) {
   DB.inquiries.unshift(data);
   DB.inquiries = DB.inquiries.slice(0, 50);
   save(DB);
-  scheduleCloudPush(400);
+  try { if (typeof scheduleCloudPush === 'function') scheduleCloudPush(400); } catch (e) {}
   return true;
 }
 
@@ -1947,7 +1926,7 @@ function bindStorePage() {
     }
     save(DB);
     storeForm = { tab: storeForm.tab, buyer:'', invoiceNo:'', date: nj.date, rows:[storeEmptyRow()], editingId: null };
-    try { scheduleCloudPush(600); } catch(e) {}
+    try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
     go('store');
     alert('ثبت شد');
   };
@@ -1973,7 +1952,7 @@ function bindStorePage() {
       const id = +b.dataset.stDel;
       DB.storeSales = (DB.storeSales || []).filter(x => x.id !== id);
       save(DB);
-      try { scheduleCloudPush(600); } catch(e) {}
+      try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
       go('store');
     };
   });
@@ -2058,7 +2037,7 @@ function bindPage(page) {
     });
     const reRender = () => {
       syncInqFromDom();
-      go('inquiry');
+      go('inquiry', { keepScroll: true });
     };
     document.querySelectorAll('[data-r]').forEach(el => {
       const live = () => {
@@ -2108,14 +2087,27 @@ function bindPage(page) {
         if (el.dataset.f === 'code' && inq.tab === 'parquet') {
           const ri = +el.dataset.r;
           const mapped = productFromCode(el.value);
+          const typeEl = document.querySelector('[data-r="' + ri + '"][data-f="type"]');
           if (mapped === 'Egmont') {
             if (inq.rows[ri].type !== 'Egmont' && inq.rows[ri].type !== 'N Egmont') {
               inq.rows[ri].type = '';
             }
+            // فقط برای Egmont رندر لازم است (دو گزینه)
             reRender();
           } else if (mapped) {
             inq.rows[ri].type = mapped;
-            reRender();
+            if (typeEl) {
+              const to = typeOptionsHtml(mapped, el.value);
+              typeEl.innerHTML = to.html;
+              typeEl.value = mapped;
+              typeEl.disabled = !!to.locked;
+            }
+            live();
+          } else if (typeEl) {
+            // کد ناشناخته → نوع قابل انتخاب
+            const to = typeOptionsHtml(inq.rows[ri].type || 'Isofam Luxury', el.value);
+            typeEl.innerHTML = to.html;
+            typeEl.disabled = false;
           }
         }
       };
@@ -2123,9 +2115,7 @@ function bindPage(page) {
         live();
         if (el.dataset.f === 'type' || el.dataset.f === 'code') reRender();
       };
-      el.onblur = reRender;
     });
-    document.getElementById('iqBuyer').onblur = reRender;
     document.getElementById('addRow').onclick = () => {
       syncInqFromDom();
       inq.rows.push(emptyRow());
@@ -2172,11 +2162,23 @@ function bindPage(page) {
     if (savedBtn) savedBtn.onclick = showSavedInquiries;
     document.querySelectorAll('[data-iqpick]').forEach(b => {
       b.onclick = () => {
-        document.getElementById('iqBuyer').value = b.dataset.iqpick;
+        const el = document.getElementById('iqBuyer');
+        if (el) el.value = b.dataset.iqpick;
         inq.buyer = b.dataset.iqpick;
-        go('inquiry');
+        refreshIqCustSuggestions(b.dataset.iqpick);
       };
     });
+    // پیشنهاد نام مشتری هنگام تایپ
+    try {
+      const be = document.getElementById('iqBuyer');
+      if (be) {
+        be.oninput = function () {
+          inq.buyer = be.value;
+          refreshIqCustSuggestions(be.value);
+        };
+        refreshIqCustSuggestions(be.value);
+      }
+    } catch (e) {}
     // default date if empty
     const dEl = document.getElementById('iqDate');
     if (dEl && !dEl.value.trim()) dEl.value = nowJalali().date;
@@ -2339,35 +2341,20 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
   navigator.serviceWorker.register('./sw.js').catch(function () {});
 }
 
-// پشتیبان خودکار هر ۹۰ ثانیه وقتی صفحه باز است
-if (!window.__smAutoBackupTimer) {
-  window.__smAutoBackupTimer = setInterval(function () {
-    if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-    if (navigator.onLine === false) return;
-    pushToSupabase()
-      .then(function () { _lastPushAt = Date.now(); })
-      .catch(function (e) { console.warn('auto backup', e); });
-  }, 90 * 1000);
-}
-
-// پشتیبان هنگام بستن / مخفی شدن تب (keepalive)
+// پشتیبان هنگام بستن / ترک صفحه (مثل ویندوز)
 window.addEventListener('pagehide', function () {
   if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-  try { tryBackupOnLeave(); } catch (e) {}
+  // sendBeacon-style: try sync push (async may be killed; still best effort)
+  try { tryBackupOnLeave(); } catch(e) {}
 });
 document.addEventListener('visibilitychange', function () {
   if (document.visibilityState === 'hidden') {
-    if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-    try { tryBackupOnLeave(); } catch (e) {}
+    try { tryBackupOnLeave(); } catch(e) {}
   }
 });
-window.addEventListener('freeze', function () {
-  if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-  try { tryBackupOnLeave(); } catch (e) {}
-});
 window.addEventListener('beforeunload', function (e) {
+  // اگر آفلاین و لاگین و تیک فعال: هشدار (مرورگر متن سفارشی را اغلب نشان نمی‌دهد)
   if (!backupOnCloseEnabled() || !sbLoggedIn()) return;
-  try { tryBackupOnLeave(); } catch (err) {}
   if (navigator.onLine === false) {
     e.preventDefault();
     e.returnValue = '';
