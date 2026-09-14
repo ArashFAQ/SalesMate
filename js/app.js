@@ -1037,7 +1037,8 @@ function openInvoiceInquiry(inv) {
   inq.discount = data.discount || '0';
   inq.validity = data.validity || inq.validity;
   inq.shaba = data.shaba || inq.shaba;
-  openInquiryExport(false);
+  // فقط نمایش PDF — بدون ذخیره در لیست و بدون اشتراک اجباری
+  openInquiryExport(false, { skipSave: true });
 }
 
 function openInvoiceModal(inv) {
@@ -1290,8 +1291,8 @@ function renderInquiry() {
       <div class="value">${fmt(total)} ریال</div>
       <div style="margin-top:6px;opacity:.9;font-size:13px">${words(total)} ریال</div>
     </div>
-    <button class="btn btn-primary btn-block" id="iqPdf">📤 اشتراک / PDF</button>
-    <button class="btn btn-primary btn-block" id="iqImg">📤 اشتراک تصویر</button>
+    <button class="btn btn-primary btn-block" id="iqPdf">📄 خروجی PDF</button>
+    <button class="btn btn-primary btn-block" id="iqImg">🖼 خروجی تصویر</button>
     <button class="btn btn-secondary btn-block" id="iqSave">ذخیره استعلام</button>
     <button class="btn btn-green btn-block" id="iqFinal">✓ تایید نهایی و ثبت حواله</button>
   `;
@@ -1323,7 +1324,8 @@ function syncInqFromDom() {
 }
 
 
-function openInquiryExport(asImage) {
+function openInquiryExport(asImage, opts) {
+  opts = opts || {};
   const total = inqTotal();
   const sub = inq.rows.reduce((s, r) => s + rowCost(r), 0);
   const buyer = inq.buyer || '—';
@@ -1403,11 +1405,14 @@ function openInquiryExport(asImage) {
   </div>
 </div>`;
 
-  try { saveInquirySmart(JSON.parse(JSON.stringify(inq)), total); } catch (e) {}
+  // فقط وقتی از فرم استعلام خروجی می‌گیریم ذخیره شود — نه از دکمه استعلام حواله
+  if (!opts.skipSave) {
+    try { saveInquirySmart(JSON.parse(JSON.stringify(inq)), total); } catch (e) {}
+  }
 
-  shareInquiryFile(inner, asImage, buyer, total).catch(function (err) {
+  showInquiryPreview(inner, asImage, buyer, total).catch(function (err) {
     console.error(err);
-    alert('اشتراک‌گذاری انجام نشد: ' + (err && err.message ? err.message : err));
+    alert('نمایش خروجی انجام نشد: ' + (err && err.message ? err.message : err));
   });
 }
 
@@ -1427,9 +1432,7 @@ function loadScriptOnce(src) {
   });
 }
 
-async function shareInquiryFile(innerHtml, asImage, buyer, total) {
-  // هاست رندر: باید داخل viewport باشد و visibility مخفی نباشد
-  // (left:-10000 باعث خطای "cloned iframe" در html2canvas می‌شود)
+async function renderInquiryToFile(innerHtml, asImage, buyer) {
   var host = document.getElementById('estelamRenderHost');
   if (!host) {
     host = document.createElement('div');
@@ -1437,28 +1440,16 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
     document.body.appendChild(host);
   }
   host.style.cssText = [
-    'position:fixed',
-    'top:0',
-    'left:0',
-    'width:800px',
-    'max-width:100vw',
-    'background:#ffffff',
-    'z-index:2147483646',
-    'opacity:0.01',
-    'pointer-events:none',
-    'overflow:visible',
-    'padding:0',
-    'margin:0'
+    'position:fixed', 'top:0', 'left:0', 'width:800px', 'max-width:100vw',
+    'background:#ffffff', 'z-index:2147483646', 'opacity:0.01',
+    'pointer-events:none', 'overflow:visible', 'padding:0', 'margin:0'
   ].join(';');
   host.innerHTML = innerHtml;
   var root = host.querySelector('#estelamShareRoot') || host.firstElementChild;
   if (!root) throw new Error('محتوای استعلام ساخته نشد');
 
-  // صبر برای layout و فونت
   await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
-  try {
-    if (document.fonts && document.fonts.ready) await document.fonts.ready;
-  } catch (e) {}
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) {}
 
   await loadScriptOnce('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
   if (!window.html2canvas) throw new Error('html2canvas لود نشد — اینترنت را چک کنید');
@@ -1469,49 +1460,38 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
   var canvas;
   try {
     canvas = await window.html2canvas(root, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      foreignObjectRendering: false,
-      removeContainer: true,
+      scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff',
+      logging: false, foreignObjectRendering: false, removeContainer: true,
       windowWidth: Math.max(root.scrollWidth, 800),
       windowHeight: Math.max(root.scrollHeight, 600),
-      scrollX: 0,
-      scrollY: 0,
-      x: 0,
-      y: 0
+      scrollX: 0, scrollY: 0, x: 0, y: 0
     });
   } catch (e1) {
-    // تلاش دوم با تنظیمات ساده‌تر
     canvas = await window.html2canvas(root, {
-      scale: 1.5,
-      backgroundColor: '#ffffff',
-      logging: false,
-      foreignObjectRendering: false,
-      useCORS: true
+      scale: 1.5, backgroundColor: '#ffffff', logging: false,
+      foreignObjectRendering: false, useCORS: true
     });
   }
-
-  // مخفی کردن هاست
   host.style.left = '-9999px';
   host.style.opacity = '0';
   host.innerHTML = '';
-
   if (!canvas || !canvas.width) throw new Error('رندر تصویر ناموفق بود');
 
   var safeName = String(buyer || 'estelam').replace(/[^\w\u0600-\u06FF\-]+/g, '_').slice(0, 40);
-  var fileName, file, mime;
+  var fileName, file, previewUrl, fileUrl;
+
+  // همیشه پیش‌نمایش بصری از تصویر (روی موبایل iframe PDF اغلب سیاه می‌شود)
+  var previewBlob = await new Promise(function (res) { canvas.toBlob(res, 'image/jpeg', 0.92); });
+  if (!previewBlob) throw new Error('ساخت پیش‌نمایش ناموفق بود');
+  previewUrl = URL.createObjectURL(previewBlob);
 
   if (asImage) {
-    mime = 'image/png';
     fileName = 'estelam_' + safeName + '.png';
     var blob = await new Promise(function (res) { canvas.toBlob(res, 'image/png'); });
     if (!blob) throw new Error('ساخت تصویر ناموفق بود');
-    file = new File([blob], fileName, { type: mime });
+    file = new File([blob], fileName, { type: 'image/png' });
+    fileUrl = URL.createObjectURL(blob);
   } else {
-    mime = 'application/pdf';
     fileName = 'estelam_' + safeName + '.pdf';
     var jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
     if (!jsPDF) throw new Error('کتابخانه PDF لود نشد — اینترنت را چک کنید');
@@ -1538,48 +1518,81 @@ async function shareInquiryFile(innerHtml, asImage, buyer, total) {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, slice.width, slice.height);
         ctx.drawImage(canvas, 0, offset, slice.width, slice.height, 0, 0, slice.width, slice.height);
-        var sliceH = slice.height * s;
-        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 5, 5, imgW, sliceH);
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', 5, 5, imgW, slice.height * s);
         offset += pageCanvasH;
       }
     }
     var pdfBlob = pdf.output('blob');
-    file = new File([pdfBlob], fileName, { type: mime });
+    file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+    fileUrl = URL.createObjectURL(pdfBlob);
+  }
+  return { file: file, fileName: fileName, previewUrl: previewUrl, fileUrl: fileUrl, asImage: asImage };
+}
+
+async function showInquiryPreview(innerHtml, asImage, buyer, total) {
+  showModal('<h3>در حال آماده‌سازی خروجی...</h3><div class="muted">لطفاً صبر کنید</div>');
+  var result;
+  try {
+    result = await renderInquiryToFile(innerHtml, asImage, buyer);
+  } catch (e) {
+    hideModal();
+    throw e;
   }
 
-  var shareData = {
-    files: [file],
-    title: 'استعلام ' + (buyer || ''),
-    text: 'استعلام کالا — جمع کل: ' + fmt(total) + ' ریال'
+  // همیشه تصویر نشان بده (موبایل iframe PDF را درست نشان نمی‌دهد)
+  var kind = result.asImage ? 'تصویر' : 'PDF';
+  var previewBlock = '<img src="' + result.previewUrl + '" alt="preview" style="width:100%;border-radius:12px;border:1px solid #e2e8f0;background:#fff;display:block;" />';
+
+  showModal(
+    '<h3>پیش‌نمایش استعلام (' + kind + ')</h3>' +
+    '<div class="muted" style="margin-bottom:8px;">' + esc(buyer || '') + ' — ' + fmt(total) + ' ریال</div>' +
+    '<div style="max-height:55vh;overflow:auto;margin-bottom:12px;background:#f8fafc;border-radius:12px;padding:6px;">' + previewBlock + '</div>' +
+    '<button class="btn btn-primary btn-block" id="prevDownload">⬇ ذخیره / دانلود ' + kind + '</button>' +
+    '<button class="btn btn-green btn-block" id="prevShare">📤 ارسال به پیام‌رسان</button>' +
+    '<button class="btn btn-secondary btn-block" id="prevClose">بستن</button>'
+  );
+
+  var cleaned = false;
+  function cleanup() {
+    if (cleaned) return;
+    cleaned = true;
+    try { URL.revokeObjectURL(result.previewUrl); } catch (e) {}
+    try { if (result.fileUrl) URL.revokeObjectURL(result.fileUrl); } catch (e) {}
+  }
+
+  document.getElementById('prevClose').onclick = function () {
+    cleanup();
+    hideModal();
   };
-
-  try {
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share(shareData);
-      return;
+  document.getElementById('prevDownload').onclick = function () {
+    var a = document.createElement('a');
+    a.href = result.fileUrl || result.previewUrl;
+    a.download = result.fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  document.getElementById('prevShare').onclick = async function () {
+    try {
+      var shareData = {
+        files: [result.file],
+        title: 'استعلام ' + (buyer || ''),
+        text: 'استعلام کالا — جمع کل: ' + fmt(total) + ' ریال'
+      };
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [result.file] })) {
+        await navigator.share(shareData);
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+      alert('اشتراک در این مرورگر پشتیبانی نمی‌شود؛ از دکمه ذخیره استفاده کنید.');
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      alert('ارسال انجام نشد: ' + (e && e.message ? e.message : e));
     }
-  } catch (e) {
-    if (e && e.name === 'AbortError') return;
-  }
-  try {
-    if (navigator.share) {
-      await navigator.share(shareData);
-      return;
-    }
-  } catch (e) {
-    if (e && e.name === 'AbortError') return;
-  }
-
-  // fallback: دانلود
-  var url = URL.createObjectURL(file);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-  alert('اشتراک مستقیم در این مرورگر پشتیبانی نشد؛ فایل دانلود شد.');
+  };
 }
 
 
