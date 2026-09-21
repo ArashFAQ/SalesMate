@@ -308,21 +308,33 @@ let _pushTimer = null;
 let _cloudSynced = false;
 let _cloudBusy = false;
 let _lastPullAt = 0;
+let _localDirty = false; // تغییر محلی که هنوز push نشده
+function setSyncFlash(mode) {
+  var el = document.getElementById('syncFlash');
+  if (!el) return;
+  el.classList.remove('up', 'down', 'on');
+  if (mode === 'up') { el.classList.add('up', 'on'); el.title = 'ارسال به ابر'; }
+  else if (mode === 'down') { el.classList.add('down', 'on'); el.title = 'دریافت از ابر'; }
+  else { el.title = ''; }
+}
+
 function scheduleCloudPush(delayMs, force) {
   if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
-  // بعد از لاگین/اولین pull، یا با force بعد از تغییر کاربر
+  if (force) _localDirty = true;
   if (!_cloudSynced && !force) return;
   if (_cloudBusy) return;
-  // فقط ۲ ثانیه بعد از pull خودکار نکن؛ تغییر کاربر با force رد می‌شود
   if (!force && Date.now() - _lastPullAt < 2000) return;
+  // اگر dirty هستیم، push را عقب نیندازیم
   if (_pushTimer) clearTimeout(_pushTimer);
   _pushTimer = setTimeout(function () {
     _pushTimer = null;
     if (_cloudBusy || !sbLoggedIn()) return;
     if (!force && !_cloudSynced) return;
-    if (!force && Date.now() - _lastPullAt < 2000) return;
+    if (!force && !_localDirty && Date.now() - _lastPullAt < 2000) return;
     _cloudSynced = true;
-    pushToSupabase().catch(function (e) { console.warn('cloud push', e); });
+    pushToSupabase().then(function () {
+      _localDirty = false;
+    }).catch(function (e) { console.warn('cloud push', e); });
   }, delayMs == null ? 500 : delayMs);
 }
 
@@ -440,8 +452,10 @@ async function pushToSupabase() {
   }
   DB.updatedAt = new Date().toISOString().slice(0, 19);
   save(DB, { skipCloud: true });
+  _localDirty = false;
   } finally {
     _cloudBusy = false;
+    setSyncFlash('');
   }
 }
 
@@ -449,13 +463,18 @@ async function pushToSupabase() {
 async function autoPullFromCloud(reason) {
   if (!sbLoggedIn()) return false;
   if (navigator.onLine === false) return false;
+  // تا وقتی تغییر محلی push نشده، از ابر نخوان (جلوگیری از پاک شدن داده)
+  if (_localDirty) {
+    try { scheduleCloudPush(300, true); } catch (e) {}
+    console.warn('auto pull skipped (local dirty)', reason);
+    return false;
+  }
   try {
     await pullFromSupabase();
     _cloudSynced = true;
     return true;
   } catch (e) {
     console.warn('auto pull', reason, e);
-    // اگر قبلاً sync بوده، اجازه push بده؛ وگرنه نه
     return false;
   }
 }
@@ -463,6 +482,7 @@ async function pullFromSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
   _cloudBusy = true;
+  setSyncFlash('down');
   try {
   const uid = sbUser().user_id;
   const invs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc') || [];
@@ -535,6 +555,7 @@ async function pullFromSupabase() {
   save(DB, { skipCloud: true });
   } finally {
     _cloudBusy = false;
+    setSyncFlash('');
   }
 }
 
@@ -2911,6 +2932,9 @@ function bindPage(page) {
       if (!confirm('داده گوشی با داده ابر (فقط حساب شما) جایگزین شود؟')) return;
       try {
         sbPull.textContent = 'در حال دریافت...';
+        if (_localDirty) {
+          try { await pushToSupabase(); _localDirty = false; } catch (pe) { alert('اول باید تغییرات محلی ارسال شود: ' + pe.message); return; }
+        }
         await pullFromSupabase();
         _cloudSynced = true;
         const nStore = (DB.storeSales || []).length;

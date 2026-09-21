@@ -119,3 +119,14 @@ label{font-size:12px;color:#475569;display:block}
 .ras-row{display:grid;grid-template-columns:1fr 1.2fr 36px;gap:6px;align-items:end;margin-top:8px}
 .bottom-nav .nav-btn small{font-size:8px}
 .bottom-nav .nav-btn span{font-size:15px}
+
+/* subtle cloud sync arrow — top-left */
+.sync-flash{
+  position:fixed; top:6px; left:8px; z-index:200;
+  width:14px; height:14px; line-height:14px; text-align:center;
+  font-size:10px; font-weight:700; color:rgba(148,163,184,0.5);
+  pointer-events:none; opacity:0; transition:opacity .2s;
+}
+.sync-flash.on{opacity:1}
+.sync-flash.up::before{content:"▲"}
+.sync-flash.down::before{content:"▼"}
