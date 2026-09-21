@@ -366,6 +366,8 @@ async function pushToSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) return;
   _cloudBusy = true;
+  setSyncFlash('up');
+
   try {
   const uid = sbUser().user_id;
   // پاک‌سازی timestampهای شمسی/نامعتبر در حافظه محلی

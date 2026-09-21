@@ -122,11 +122,14 @@ label{font-size:12px;color:#475569;display:block}
 
 /* subtle cloud sync arrow — top-left */
 .sync-flash{
-  position:fixed; top:6px; left:8px; z-index:200;
-  width:14px; height:14px; line-height:14px; text-align:center;
-  font-size:10px; font-weight:700; color:rgba(148,163,184,0.5);
-  pointer-events:none; opacity:0; transition:opacity .2s;
+  position:fixed; top:8px; left:10px; z-index:9999;
+  width:20px; height:20px; line-height:20px; text-align:center;
+  font-size:12px; font-weight:800; color:#38bdf8;
+  background:rgba(15,23,42,0.35); border-radius:8px;
+  pointer-events:none; opacity:0; transition:opacity .15s;
 }
 .sync-flash.on{opacity:1}
+.sync-flash.up{color:#4ade80}
 .sync-flash.up::before{content:"▲"}
+.sync-flash.down{color:#38bdf8}
 .sync-flash.down::before{content:"▼"}
