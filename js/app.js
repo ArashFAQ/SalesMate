@@ -789,34 +789,60 @@ function gregorianToJalaliNums(gy, gm, gd) {
 }
 
 function parseFlexibleJalali(textIn) {
+  // 0809 → روز 8 ماه 9 سال جاری | 130706 → 13/07/1406
   var s = en(String(textIn || '')).trim().replace(/[-.]/g, '/').replace(/\s/g, '');
   if (!s) return null;
-  var parts = s.split('/').filter(Boolean);
-  if (!parts.length) return null;
-  var nums;
-  try { nums = parts.map(function (p) { return parseInt(p, 10); }); }
-  catch (e) { return null; }
-  if (nums.some(function (n) { return isNaN(n); })) return null;
   var today = new Date();
   var cur = gregorianToJalaliNums(today.getFullYear(), today.getMonth() + 1, today.getDate());
   var y, m, d;
-  if (nums.length === 1) {
-    y = cur.y; m = cur.m; d = nums[0];
-  } else if (nums.length === 2) {
-    d = nums[0]; m = nums[1];
-    if (m > 12 && d <= 12) { var t = d; d = m; m = t; }
-    y = cur.y;
+
+  if (/^\d+$/.test(s)) {
+    var digits = s;
+    var len = digits.length;
+    if (len === 1 || len === 2) {
+      d = parseInt(digits, 10); m = cur.m; y = cur.y;
+    } else if (len === 3) {
+      var d1 = parseInt(digits.slice(0, 1), 10);
+      var m2 = parseInt(digits.slice(1), 10);
+      var d2 = parseInt(digits.slice(0, 2), 10);
+      var m1 = parseInt(digits.slice(2), 10);
+      if (m2 >= 1 && m2 <= 12 && d1 >= 1 && d1 <= 31) { d = d1; m = m2; y = cur.y; }
+      else if (m1 >= 1 && m1 <= 12 && d2 >= 1 && d2 <= 31) { d = d2; m = m1; y = cur.y; }
+      else return null;
+    } else if (len === 4) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = cur.y;
+    } else if (len === 5) {
+      d = parseInt(digits.slice(0, 1), 10);
+      m = parseInt(digits.slice(1, 3), 10);
+      y = 1400 + parseInt(digits.slice(3), 10);
+    } else if (len === 6) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = 1400 + parseInt(digits.slice(4, 6), 10);
+    } else if (len === 8) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = parseInt(digits.slice(4, 8), 10);
+    } else return null;
   } else {
-    var a = nums[0], b = nums[1], c = nums[2];
-    if (a > 31 || a > 100) { // year first
-      y = a < 100 ? 1400 + a : a;
-      m = b; d = c;
+    var parts = s.split('/').filter(Boolean);
+    if (!parts.length) return null;
+    var nums = parts.map(function (p) { return parseInt(p, 10); });
+    if (nums.some(function (n) { return isNaN(n); })) return null;
+    if (nums.length === 1) { y = cur.y; m = cur.m; d = nums[0]; }
+    else if (nums.length === 2) {
+      d = nums[0]; m = nums[1];
+      if (m > 12 && d <= 12) { var tmp = d; d = m; m = tmp; }
+      y = cur.y;
     } else {
-      d = a; m = b;
-      y = c < 100 ? 1400 + c : c;
+      var a = nums[0], b = nums[1], c = nums[2];
+      if (a > 31 || a >= 100) { y = a < 100 ? 1400 + a : a; m = b; d = c; }
+      else { d = a; m = b; y = c < 100 ? 1400 + c : c; }
     }
   }
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;
   return { y: y, m: m, d: d };
 }
 
@@ -834,14 +860,14 @@ function renderRas() {
   var rowsHtml = '';
   rasRows.forEach(function (row, i) {
     rowsHtml += '<div class="ras-row">' +
-      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="۸/۷ یا ۸/۷/۰۶" class="ltr" inputmode="numeric" /></div>' +
+      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="0809 یا 130706" class="ltr" inputmode="numeric" /></div>' +
       '<div><label>مبلغ</label><input data-ras-f="amount" data-ras-i="' + i + '" value="' + esc(row.amount) + '" placeholder="مبلغ" class="ltr" inputmode="numeric" /></div>' +
       '<button type="button" class="btn btn-danger btn-sm" data-ras-rm="' + i + '" style="margin-bottom:2px">✕</button>' +
       '</div>';
   });
   return '' +
     '<div class="card"><h2>راس‌گیری چک</h2>' +
-    '<div class="muted">تاریخ: روز/ماه (سال جاری) یا روز/ماه/سال دو یا چهار رقمی · مبلغ با جداکننده هزارگان</div>' +
+    '<div class="muted">تاریخ فقط عدد: 0809=۸ شهریور امسال · 130706=۱۳ تیر ۱۴۰۶</div>' +
     '<div class="ras-cards">' +
     '<div class="ras-card" style="background:#0284c7"><div class="rl">جمع مبلغ</div><div class="rv">' + totalTxt + '</div></div>' +
     '<div class="ras-card" style="background:#f59e0b"><div class="rl">تعداد روز</div><div class="rv">' + daysTxt + '</div></div>' +
@@ -850,6 +876,7 @@ function renderRas() {
     '<div class="row between"><strong>لیست چک‌ها</strong><button type="button" class="btn btn-primary btn-sm" id="rasAdd">+ افزودن چک</button></div>' +
     '<div id="rasRows">' + rowsHtml + '</div>' +
     '<button type="button" class="btn btn-green btn-block mt" id="rasCalc">محاسبه راس</button>' +
+    (r ? ('<button type="button" class="btn btn-primary btn-block mt" id="rasPdf">📄 خروجی PDF</button>' + '<button type="button" class="btn btn-primary btn-block" id="rasImg">🖼 خروجی تصویر</button>') : '') +
     '<div class="muted mt" style="white-space:pre-line;line-height:1.7">' + detail + '</div>' +
     '</div>';
 }
@@ -993,12 +1020,46 @@ function bindRasPage() {
       avgRound: avgRound,
       daysTxt: daysTxt,
       rasStr: rasStr,
+      items: items,
       detail: 'جزئیات (به ترتیب تاریخ):\n' + details.join('\n') +
         '\n\nمیانگین وزنی: ' + fa(avgDays.toFixed(2)) + ' روز  →  راس: ' + fa(rasStr)
     };
     go('ras');
   };
+  function exportRas(asImage) {
+    if (!rasLastResult) { alert('ابتدا محاسبه راس را انجام دهید'); return; }
+    var r = rasLastResult;
+    var itemsHtml = (r.items || []).map(function (x, idx) {
+      return '<tr>' +
+        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">' + fa(idx + 1) + '</td>' +
+        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0;direction:ltr">' + fa(formatJalaliParts(x.y, x.m, x.d)) + '</td>' +
+        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0;direction:ltr">' + fmt(x.amount) + '</td>' +
+        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">' + fa(x.delta) + ' روز</td></tr>';
+    }).join('');
+    var inner = '<div id="estelamShareRoot" style="width:800px;max-width:100%;margin:0 auto;background:#fff;font-family:Tahoma,Vazirmatn,sans-serif;direction:rtl;color:#0f172a;padding:8px">' +
+      '<div style="background:#0284c7;color:#fff;padding:16px 18px;border-radius:16px 16px 0 0">' +
+      '<div style="font-size:20px;font-weight:800">گزارش راس‌گیری چک</div>' +
+      '<div style="font-size:12px;opacity:.9;margin-top:4px">' + esc(DB.company || 'SalesMate') + '</div></div>' +
+      '<div style="display:flex;gap:10px;padding:14px 0">' +
+      '<div style="flex:1;background:#0284c7;border-radius:14px;padding:14px;color:#fff;text-align:center"><div style="font-size:12px;opacity:.9">جمع مبلغ</div><div style="font-size:16px;font-weight:800;margin-top:6px;direction:ltr">' + fmt(r.total) + ' ریال</div></div>' +
+      '<div style="flex:1;background:#f59e0b;border-radius:14px;padding:14px;color:#fff;text-align:center"><div style="font-size:12px;opacity:.9">تعداد روز</div><div style="font-size:16px;font-weight:800;margin-top:6px">' + esc(r.daysTxt) + '</div></div>' +
+      '<div style="flex:1;background:#059669;border-radius:14px;padding:14px;color:#fff;text-align:center"><div style="font-size:12px;opacity:.9">تاریخ راس</div><div style="font-size:18px;font-weight:900;margin-top:6px;direction:ltr">' + fa(r.rasStr) + '</div></div></div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr style="background:#0284c7;color:#fff">' +
+      '<th style="padding:10px">ردیف</th><th style="padding:10px">تاریخ چک</th><th style="padding:10px">مبلغ</th><th style="padding:10px">روز از امروز</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>' +
+      '<div style="margin-top:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;padding:14px;text-align:center">' +
+      '<div style="color:#047857;font-size:13px">میانگین وزنی</div>' +
+      '<div style="font-size:18px;font-weight:800;color:#047857;margin-top:4px">' + fa((r.avgDays || 0).toFixed(2)) + ' روز</div>' +
+      '<div style="margin-top:8px;font-size:16px;font-weight:800">تاریخ راس: <span style="direction:ltr;display:inline-block">' + fa(r.rasStr) + '</span></div></div></div>';
+    showInquiryPreview(inner, asImage, 'راس چک', r.total).catch(function (err) {
+      alert('خروجی انجام نشد: ' + (err && err.message ? err.message : err));
+    });
+  }
+  var pdfBtn = document.getElementById('rasPdf');
+  if (pdfBtn) pdfBtn.onclick = function () { exportRas(false); };
+  var imgBtn = document.getElementById('rasImg');
+  if (imgBtn) imgBtn.onclick = function () { exportRas(true); };
 }
+
 
 
 const titles = {
