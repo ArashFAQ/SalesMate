@@ -48,6 +48,7 @@ const PRODUCT_FACTORS = {
   'New Way': 1.9608
 };
 const PRODUCT_OPTIONS = Object.keys(PRODUCT_FACTORS);
+const GRADE_OPTIONS = ['GA', 'GB', 'GC'];
 const EGMONT_OPTIONS = ['Egmont', 'N Egmont'];
 const CODE_TO_PRODUCT = {};
 [
@@ -2001,78 +2002,137 @@ function renderStore() {
 
 function renderStoreRowsInto(container) {
   if (!container) return;
-  storeRecalcRows();
+  try { storeRecalcRows(); } catch (e) {}
   let h = '';
+  const gradesList = (typeof GRADE_OPTIONS !== 'undefined' && GRADE_OPTIONS) ? GRADE_OPTIONS : ['GA', 'GB', 'GC'];
+  const productList = (typeof PRODUCT_OPTIONS !== 'undefined' && PRODUCT_OPTIONS) ? PRODUCT_OPTIONS : ['Isofam Luxury'];
   (storeForm.rows || []).forEach((r, idx) => {
-    const locked = storeForm.tab === 'parquet' && productFromCode(r.code);
-    if (locked) r.type = locked;
+    let locked = false;
+    try {
+      locked = storeForm.tab === 'parquet' && !!productFromCode(r.code);
+      if (locked) r.type = productFromCode(r.code);
+    } catch (e) {}
     if (storeForm.tab === 'parquet') {
-      const opts = PRODUCT_OPTIONS.map(o => `<option value="${o}" ${r.type===o?'selected':''}>${o}</option>`).join('');
-      const grades = GRADE_OPTIONS.map(g => `<option value="${g}" ${r.grade===g?'selected':''}>${g}</option>`).join('');
-      h += `<div class="card" style="padding:10px;margin-top:8px;background:#fff">
-        <div class="row between"><span class="muted">ردیف ${fa(idx+1)}</span>
-          <button type="button" class="btn btn-danger btn-sm" data-st-rm="${idx}">✕</button></div>
-        <label>کد</label><input data-st-f="code" data-st-i="${idx}" value="${esc(r.code)}" class="ltr" />
-        <label>نوع</label><select data-st-f="type" data-st-i="${idx}" ${locked?'disabled':''}>${opts}</select>
-        <label>گرید</label><select data-st-f="grade" data-st-i="${idx}">${grades}</select>
-        <label>کارتن</label><input data-st-f="qty1" data-st-i="${idx}" value="${esc(r.qty1)}" class="ltr" inputmode="decimal" />
-        <label>متراژ</label><input value="${esc(r.qty2)}" class="ltr" readonly />
-        <label>قیمت واحد</label><input data-st-f="price" data-st-i="${idx}" value="${esc(r.price)}" class="ltr" inputmode="numeric" />
-        <div class="muted mt">هزینه: <b class="ltr">${fmt(r.cost||0)}</b></div>
-      </div>`;
+      const opts = productList.map(o => '<option value="' + o + '" ' + (r.type === o ? 'selected' : '') + '>' + o + '</option>').join('');
+      const grades = gradesList.map(g => '<option value="' + g + '" ' + (r.grade === g ? 'selected' : '') + '>' + g + '</option>').join('');
+      h += '<div class="card" data-st-row="' + idx + '" style="padding:10px;margin-top:8px;background:#fff">' +
+        '<div class="row between"><span class="muted">ردیف ' + fa(idx + 1) + '</span>' +
+        '<button type="button" class="btn btn-danger btn-sm" data-st-rm="' + idx + '">✕</button></div>' +
+        '<label>کد</label><input data-st-f="code" data-st-i="' + idx + '" value="' + esc(r.code) + '" class="ltr" autocomplete="off" />' +
+        '<label>نوع</label><select data-st-f="type" data-st-i="' + idx + '" ' + (locked ? 'disabled' : '') + '>' + opts + '</select>' +
+        '<label>گرید</label><select data-st-f="grade" data-st-i="' + idx + '">' + grades + '</select>' +
+        '<label>کارتن</label><input data-st-f="qty1" data-st-i="' + idx + '" value="' + esc(r.qty1) + '" class="ltr" inputmode="decimal" autocomplete="off" />' +
+        '<label>متراژ</label><input data-st-meter value="' + esc(r.qty2) + '" class="ltr" readonly tabindex="-1" />' +
+        '<label>قیمت واحد</label><input data-st-f="price" data-st-i="' + idx + '" value="' + esc(r.price) + '" class="ltr" inputmode="numeric" autocomplete="off" />' +
+        '<div class="muted mt">هزینه: <b class="ltr" data-st-cost>' + fmt(r.cost || 0) + '</b></div></div>';
     } else if (storeForm.tab === 'mdf') {
-      h += `<div class="card" style="padding:10px;margin-top:8px;background:#fff">
-        <div class="row between"><span class="muted">ردیف ${fa(idx+1)}</span>
-          <button type="button" class="btn btn-danger btn-sm" data-st-rm="${idx}">✕</button></div>
-        <label>نوع</label><input data-st-f="type" data-st-i="${idx}" value="${esc(r.type)}" />
-        <label>کد</label><input data-st-f="code" data-st-i="${idx}" value="${esc(r.code)}" class="ltr" />
-        <label>پالت</label><input data-st-f="qty1" data-st-i="${idx}" value="${esc(r.qty1)}" class="ltr" />
-        <label>ورق</label><input data-st-f="qty2" data-st-i="${idx}" value="${esc(r.qty2)}" class="ltr" />
-        <label>قیمت</label><input data-st-f="price" data-st-i="${idx}" value="${esc(r.price)}" class="ltr" inputmode="numeric" />
-        <div class="muted mt">هزینه: <b class="ltr">${fmt(r.cost||0)}</b></div>
-      </div>`;
+      h += '<div class="card" data-st-row="' + idx + '" style="padding:10px;margin-top:8px;background:#fff">' +
+        '<div class="row between"><span class="muted">ردیف ' + fa(idx + 1) + '</span>' +
+        '<button type="button" class="btn btn-danger btn-sm" data-st-rm="' + idx + '">✕</button></div>' +
+        '<label>نوع</label><input data-st-f="type" data-st-i="' + idx + '" value="' + esc(r.type) + '" autocomplete="off" />' +
+        '<label>کد</label><input data-st-f="code" data-st-i="' + idx + '" value="' + esc(r.code) + '" class="ltr" autocomplete="off" />' +
+        '<label>پالت</label><input data-st-f="qty1" data-st-i="' + idx + '" value="' + esc(r.qty1) + '" class="ltr" autocomplete="off" />' +
+        '<label>ورق</label><input data-st-f="qty2" data-st-i="' + idx + '" value="' + esc(r.qty2) + '" class="ltr" autocomplete="off" />' +
+        '<label>قیمت</label><input data-st-f="price" data-st-i="' + idx + '" value="' + esc(r.price) + '" class="ltr" inputmode="numeric" autocomplete="off" />' +
+        '<div class="muted mt">هزینه: <b class="ltr" data-st-cost>' + fmt(r.cost || 0) + '</b></div></div>';
     } else {
-      h += `<div class="card" style="padding:10px;margin-top:8px;background:#fff">
-        <div class="row between"><span class="muted">ردیف ${fa(idx+1)}</span>
-          <button type="button" class="btn btn-danger btn-sm" data-st-rm="${idx}">✕</button></div>
-        <label>نوع</label><input data-st-f="type" data-st-i="${idx}" value="${esc(r.type)}" />
-        <label>سایز</label><input data-st-f="size" data-st-i="${idx}" value="${esc(r.size||'')}" />
-        <label>پالت</label><input data-st-f="qty1" data-st-i="${idx}" value="${esc(r.qty1)}" class="ltr" />
-        <label>ورق</label><input data-st-f="qty2" data-st-i="${idx}" value="${esc(r.qty2)}" class="ltr" />
-        <label>قیمت</label><input data-st-f="price" data-st-i="${idx}" value="${esc(r.price)}" class="ltr" inputmode="numeric" />
-        <div class="muted mt">هزینه: <b class="ltr">${fmt(r.cost||0)}</b></div>
-      </div>`;
+      h += '<div class="card" data-st-row="' + idx + '" style="padding:10px;margin-top:8px;background:#fff">' +
+        '<div class="row between"><span class="muted">ردیف ' + fa(idx + 1) + '</span>' +
+        '<button type="button" class="btn btn-danger btn-sm" data-st-rm="' + idx + '">✕</button></div>' +
+        '<label>نوع</label><input data-st-f="type" data-st-i="' + idx + '" value="' + esc(r.type) + '" autocomplete="off" />' +
+        '<label>سایز</label><input data-st-f="size" data-st-i="' + idx + '" value="' + esc(r.size || '') + '" autocomplete="off" />' +
+        '<label>پالت</label><input data-st-f="qty1" data-st-i="' + idx + '" value="' + esc(r.qty1) + '" class="ltr" autocomplete="off" />' +
+        '<label>ورق</label><input data-st-f="qty2" data-st-i="' + idx + '" value="' + esc(r.qty2) + '" class="ltr" autocomplete="off" />' +
+        '<label>قیمت</label><input data-st-f="price" data-st-i="' + idx + '" value="' + esc(r.price) + '" class="ltr" inputmode="numeric" autocomplete="off" />' +
+        '<div class="muted mt">هزینه: <b class="ltr" data-st-cost>' + fmt(r.cost || 0) + '</b></div></div>';
     }
   });
   container.innerHTML = h;
+  // reset delegation flag so bind can re-attach if needed — actually keep flag on element; after innerHTML listeners on parent remain
 }
 
 function bindStorePage() {
   const rowsEl = document.getElementById('stRows');
-  renderStoreRowsInto(rowsEl);
 
+  function updateStoreTotalsUI() {
+    try {
+      const total = storeTotal();
+      document.querySelectorAll('.card .row.between.mt span.ltr').forEach(sp => {
+        if (sp.parentElement && sp.parentElement.textContent.indexOf('جمع') >= 0) {
+          sp.textContent = fmt(total) + ' ریال';
+        }
+      });
+    } catch (e) {}
+  }
+
+  function updateStoreRowCostUI(i) {
+    try {
+      if (!storeForm.rows[i]) return;
+      const rowCard = document.querySelector('[data-st-row="' + i + '"]');
+      if (!rowCard) return;
+      const costB = rowCard.querySelector('[data-st-cost]');
+      if (costB) costB.textContent = fmt(storeForm.rows[i].cost || 0);
+      const meter = rowCard.querySelector('[data-st-meter]');
+      if (meter) meter.value = storeForm.rows[i].qty2 || '';
+      const typeSel = rowCard.querySelector('[data-st-f="type"]');
+      if (typeSel && storeForm.rows[i].type) {
+        typeSel.value = storeForm.rows[i].type;
+        const locked = !!productFromCode(storeForm.rows[i].code);
+        typeSel.disabled = locked;
+      }
+    } catch (e) {}
+  }
+
+  function handleStoreField(el) {
+    const i = +el.dataset.stI;
+    const f = el.dataset.stF;
+    if (isNaN(i) || !f || !storeForm.rows[i]) return;
+    storeForm.rows[i][f] = el.value;
+    if (f === 'code' && storeForm.tab === 'parquet') {
+      const p = productFromCode(el.value);
+      if (p) storeForm.rows[i].type = p;
+    }
+    storeRecalcRows();
+    updateStoreRowCostUI(i);
+    updateStoreTotalsUI();
+  }
+
+  // رندر ردیف‌ها
+  try {
+    renderStoreRowsInto(rowsEl);
+  } catch (e) {
+    console.error('renderStoreRowsInto', e);
+    if (rowsEl) rowsEl.innerHTML = '<div class="empty">خطا در نمایش ردیف‌ها: ' + (e.message || e) + '</div>';
+  }
+
+  // تب‌ها
   document.querySelectorAll('[data-store-tab]').forEach(b => {
-    b.onclick = () => {
+    b.onclick = function () {
       storeForm.tab = b.dataset.storeTab;
       storeForm.rows = [storeEmptyRow()];
       go('store');
     };
   });
+
+  // افزودن ردیف — اول از همه
   const addBtn = document.getElementById('stAddRow');
   if (addBtn) {
     addBtn.onclick = function (e) {
-      try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch (err) {}
-      if (!storeForm.rows) storeForm.rows = [];
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      if (!Array.isArray(storeForm.rows)) storeForm.rows = [];
       storeForm.rows.push(storeEmptyRow());
-      const box = document.getElementById('stRows');
-      renderStoreRowsInto(box);
-      bindStoreRowEvents();
-      updateStoreTotalsUI();
-      // فوکوس روی کد/اولین فیلد ردیف جدید
       try {
-        const last = box && box.querySelectorAll('[data-st-f="code"], [data-st-f="type"]');
-        if (last && last.length) {
-          const el = last[last.length - 1];
+        renderStoreRowsInto(document.getElementById('stRows'));
+      } catch (err) {
+        alert('خطا افزودن ردیف: ' + (err.message || err));
+        return;
+      }
+      updateStoreTotalsUI();
+      try {
+        const box = document.getElementById('stRows');
+        const codes = box ? box.querySelectorAll('[data-st-f="code"], [data-st-f="type"]') : [];
+        if (codes.length) {
+          const el = codes[codes.length - 1];
           el.focus();
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -2080,91 +2140,41 @@ function bindStorePage() {
     };
   }
 
+  // event delegation — تایپ بدون از دست دادن فوکوس
+  if (rowsEl && !rowsEl._storeBound) {
+    rowsEl._storeBound = true;
+    rowsEl.addEventListener('input', function (e) {
+      const el = e.target;
+      if (!el || !el.dataset || !el.dataset.stF) return;
+      handleStoreField(el);
+    }, true);
+    rowsEl.addEventListener('change', function (e) {
+      const el = e.target;
+      if (!el || !el.dataset || !el.dataset.stF) return;
+      handleStoreField(el);
+    }, true);
+    rowsEl.addEventListener('click', function (e) {
+      var btn = e.target.closest ? e.target.closest('[data-st-rm]') : null;
+      if (!btn) return;
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      const i = +btn.dataset.stRm;
+      storeForm.rows.splice(i, 1);
+      if (!storeForm.rows.length) storeForm.rows.push(storeEmptyRow());
+      renderStoreRowsInto(rowsEl);
+      updateStoreTotalsUI();
+    }, true);
+  }
+
+  updateStoreTotalsUI();
+
   function syncHeader() {
     storeForm.buyer = (document.getElementById('stBuyer') || {}).value || '';
     storeForm.invoiceNo = (document.getElementById('stInv') || {}).value || '';
     storeForm.date = (document.getElementById('stDate') || {}).value || '';
   }
 
-  function updateStoreTotalsUI() {
-    const total = storeTotal();
-    document.querySelectorAll('.card .row.between.mt span.ltr').forEach(sp => {
-      if (sp.parentElement && sp.parentElement.textContent.includes('جمع')) {
-        sp.textContent = fmt(total) + ' ریال';
-      }
-    });
-  }
-
-  function updateStoreRowCostUI(i) {
-    const card = document.querySelector('[data-st-i="' + i + '"]');
-    if (!card) return;
-    const rowCard = card.closest('.card');
-    if (!rowCard) return;
-    const costB = rowCard.querySelector('.muted.mt b, .muted.mt .ltr, .muted b');
-    if (costB && storeForm.rows[i]) {
-      costB.textContent = fmt(storeForm.rows[i].cost || 0);
-    }
-    // متراژ readonly
-    if (storeForm.tab === 'parquet' && storeForm.rows[i]) {
-      const inputs = rowCard.querySelectorAll('input');
-      // متراژ معمولاً input بدون data-st-f است
-      inputs.forEach(inp => {
-        if (!inp.dataset.stF && inp.readOnly) {
-          inp.value = storeForm.rows[i].qty2 || '';
-        }
-      });
-      const typeSel = rowCard.querySelector('[data-st-f="type"]');
-      if (typeSel && storeForm.rows[i].type) {
-        typeSel.value = storeForm.rows[i].type;
-        const locked = !!productFromCode(storeForm.rows[i].code);
-        typeSel.disabled = locked;
-      }
-    }
-  }
-
-  function bindStoreRowEvents() {
-    document.querySelectorAll('[data-st-f]').forEach(inp => {
-      inp.oninput = () => {
-        const i = +inp.dataset.stI;
-        const f = inp.dataset.stF;
-        if (!storeForm.rows[i]) return;
-        let val = inp.value;
-        if (f === 'price') {
-          // فقط رقم و جداکننده؛ مقدار خام در مدل
-          storeForm.rows[i][f] = val;
-        } else {
-          storeForm.rows[i][f] = val;
-        }
-        if (f === 'code' && storeForm.tab === 'parquet') {
-          const p = productFromCode(val);
-          if (p) storeForm.rows[i].type = p;
-          else if (val && !productFromCode(val)) {
-            // کد ناشناخته — نوع قابل ویرایش می‌ماند
-          }
-        }
-        storeRecalcRows();
-        // بدون re-render کامل تا فوکوس از بین نرود
-        updateStoreRowCostUI(i);
-        updateStoreTotalsUI();
-      };
-      // برای select
-      inp.onchange = inp.oninput;
-    });
-    document.querySelectorAll('[data-st-rm]').forEach(b => {
-      b.onclick = () => {
-        const i = +b.dataset.stRm;
-        storeForm.rows.splice(i, 1);
-        if (!storeForm.rows.length) storeForm.rows.push(storeEmptyRow());
-        renderStoreRowsInto(document.getElementById('stRows'));
-        bindStoreRowEvents();
-        updateStoreTotalsUI();
-      };
-    });
-  }
-  bindStoreRowEvents();
-
   const conf = document.getElementById('stConfirm');
-  if (conf) conf.onclick = () => {
+  if (conf) conf.onclick = function () {
     syncHeader();
     storeRecalcRows();
     const total = storeTotal();
@@ -2174,15 +2184,16 @@ function bindStorePage() {
     const nj = nowJalali();
     const time = new Date().toTimeString().slice(0, 8);
     const items = JSON.parse(JSON.stringify(storeForm.rows));
+    if (!DB.storeNextId) DB.storeNextId = 1;
     const rec = {
       id: storeForm.editingId || (DB.storeNextId++),
       customer: storeForm.buyer.trim(),
       invoiceNo: en(storeForm.invoiceNo).trim(),
       date: en(storeForm.date || nj.date),
-      time,
+      time: time,
       total: String(total),
       tab: storeForm.tab,
-      items,
+      items: items,
       itemsJson: JSON.stringify(items),
       createdAt: new Date().toISOString()
     };
@@ -2195,14 +2206,14 @@ function bindStorePage() {
       DB.storeSales.unshift(rec);
     }
     save(DB);
-    storeForm = { tab: storeForm.tab, buyer:'', invoiceNo:'', date: nj.date, rows:[storeEmptyRow()], editingId: null };
-    try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
+    storeForm = { tab: storeForm.tab, buyer: '', invoiceNo: '', date: nj.date, rows: [storeEmptyRow()], editingId: null };
+    try { if (sbLoggedIn()) pushToSupabase(); } catch (e) {}
     go('store');
     alert('ثبت شد');
   };
 
   document.querySelectorAll('[data-st-edit]').forEach(b => {
-    b.onclick = () => {
+    b.onclick = function () {
       const id = +b.dataset.stEdit;
       const s = (DB.storeSales || []).find(x => x.id === id);
       if (!s) return;
@@ -2217,16 +2228,17 @@ function bindStorePage() {
     };
   });
   document.querySelectorAll('[data-st-del]').forEach(b => {
-    b.onclick = () => {
+    b.onclick = function () {
       if (!confirm('حذف شود؟')) return;
       const id = +b.dataset.stDel;
       DB.storeSales = (DB.storeSales || []).filter(x => x.id !== id);
       save(DB);
-      try { if (sbLoggedIn()) pushToSupabase(); } catch(e) {}
+      try { if (sbLoggedIn()) pushToSupabase(); } catch (e) {}
       go('store');
     };
   });
 }
+
 
 
 function bindPage(page) {
