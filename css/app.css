@@ -110,3 +110,12 @@ label{font-size:12px;color:#475569;display:block}
 .remain.debt { color: #b91c1c; }
 .remain.cred { color: #047857; }
 .remain.zero { color: #64748b; }
+
+/* ras page */
+.ras-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}
+.ras-card{border-radius:14px;padding:10px 8px;color:#fff;text-align:center}
+.ras-card .rl{font-size:11px;opacity:.9}
+.ras-card .rv{font-size:14px;font-weight:800;margin-top:4px;direction:ltr}
+.ras-row{display:grid;grid-template-columns:1fr 1.2fr 36px;gap:6px;align-items:end;margin-top:8px}
+.bottom-nav .nav-btn small{font-size:8px}
+.bottom-nav .nav-btn span{font-size:15px}

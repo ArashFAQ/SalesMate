@@ -727,9 +727,283 @@ function monthTitle(key) {
   return fa(key);
 }
 
+
+/* ---------- راس‌گیری چک ---------- */
+let rasRows = [{ date: '', amount: '' }];
+let rasLastResult = null;
+
+function jalaliToGregorian(jy, jm, jd) {
+  jy = parseInt(jy, 10); jm = parseInt(jm, 10); jd = parseInt(jd, 10);
+  var jy2 = jy - 979;
+  var days = 365 * jy2 + Math.floor(jy2 / 33) * 8 + Math.floor(((jy2 % 33) + 3) / 4);
+  for (var i = 1; i < jm; i++) days += (i <= 6) ? 31 : 30;
+  days += jd - 1;
+  var gdn = days + 79;
+  var gy = 1600;
+  gy += 400 * Math.floor(gdn / 146097);
+  gdn %= 146097;
+  var leap = true;
+  if (gdn >= 36525) {
+    gdn -= 1;
+    gy += 100 * Math.floor(gdn / 36524);
+    gdn %= 36524;
+    if (gdn >= 365) gdn += 1;
+    else leap = false;
+  }
+  gy += 4 * Math.floor(gdn / 1461);
+  gdn %= 1461;
+  if (gdn >= 366) {
+    leap = false;
+    gdn -= 1;
+    gy += Math.floor(gdn / 365);
+    gdn %= 365;
+  }
+  var gd = gdn + 1;
+  var gdim = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var gm = 1;
+  for (var k = 0; k < gdim.length; k++) {
+    if (gd <= gdim[k]) { gm = k + 1; break; }
+    gd -= gdim[k];
+  }
+  return { y: gy, m: gm, d: gd };
+}
+
+function gregorianToJalaliNums(gy, gm, gd) {
+  var gdim = [31, ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var gy2 = gy - 1600, gm2 = gm - 1, gd2 = gd - 1;
+  var gdn = 365 * gy2 + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400);
+  for (var i = 0; i < gm2; i++) gdn += gdim[i];
+  gdn += gd2;
+  var jdn = gdn - 79;
+  var jnp = Math.floor(jdn / 12053);
+  jdn %= 12053;
+  var jy = 979 + 33 * jnp + 4 * Math.floor(jdn / 1461);
+  jdn %= 1461;
+  if (jdn >= 366) {
+    jy += Math.floor((jdn - 1) / 365);
+    jdn = (jdn - 1) % 365;
+  }
+  var jm = (jdn < 186) ? 1 + Math.floor(jdn / 31) : 7 + Math.floor((jdn - 186) / 30);
+  var jd = 1 + ((jm <= 6) ? (jdn - (jm - 1) * 31) : (jdn - 186 - (jm - 7) * 30));
+  return { y: jy, m: jm, d: jd };
+}
+
+function parseFlexibleJalali(textIn) {
+  var s = en(String(textIn || '')).trim().replace(/[-.]/g, '/').replace(/\s/g, '');
+  if (!s) return null;
+  var parts = s.split('/').filter(Boolean);
+  if (!parts.length) return null;
+  var nums;
+  try { nums = parts.map(function (p) { return parseInt(p, 10); }); }
+  catch (e) { return null; }
+  if (nums.some(function (n) { return isNaN(n); })) return null;
+  var today = new Date();
+  var cur = gregorianToJalaliNums(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  var y, m, d;
+  if (nums.length === 1) {
+    y = cur.y; m = cur.m; d = nums[0];
+  } else if (nums.length === 2) {
+    d = nums[0]; m = nums[1];
+    if (m > 12 && d <= 12) { var t = d; d = m; m = t; }
+    y = cur.y;
+  } else {
+    var a = nums[0], b = nums[1], c = nums[2];
+    if (a > 31 || a > 100) { // year first
+      y = a < 100 ? 1400 + a : a;
+      m = b; d = c;
+    } else {
+      d = a; m = b;
+      y = c < 100 ? 1400 + c : c;
+    }
+  }
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { y: y, m: m, d: d };
+}
+
+function formatJalaliParts(y, m, d) {
+  return String(y).padStart(4, '0') + '/' + String(m).padStart(2, '0') + '/' + String(d).padStart(2, '0');
+}
+
+function renderRas() {
+  if (!rasRows.length) rasRows = [{ date: '', amount: '' }];
+  var r = rasLastResult;
+  var totalTxt = r ? fmt(r.total) + ' ریال' : '—';
+  var daysTxt = r ? r.daysTxt : '—';
+  var rasTxt = r ? fa(r.rasStr) : '—';
+  var detail = r ? esc(r.detail) : 'پس از ورود چک‌ها «محاسبه راس» را بزنید.';
+  var rowsHtml = '';
+  rasRows.forEach(function (row, i) {
+    rowsHtml += '<div class="ras-row">' +
+      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="۸/۷ یا ۸/۷/۰۶" class="ltr" inputmode="numeric" /></div>' +
+      '<div><label>مبلغ</label><input data-ras-f="amount" data-ras-i="' + i + '" value="' + esc(row.amount) + '" placeholder="مبلغ" class="ltr" inputmode="numeric" /></div>' +
+      '<button type="button" class="btn btn-danger btn-sm" data-ras-rm="' + i + '" style="margin-bottom:2px">✕</button>' +
+      '</div>';
+  });
+  return '' +
+    '<div class="card"><h2>راس‌گیری چک</h2>' +
+    '<div class="muted">تاریخ: روز/ماه (سال جاری) یا روز/ماه/سال دو یا چهار رقمی · مبلغ با جداکننده هزارگان</div>' +
+    '<div class="ras-cards">' +
+    '<div class="ras-card" style="background:#0284c7"><div class="rl">جمع مبلغ</div><div class="rv">' + totalTxt + '</div></div>' +
+    '<div class="ras-card" style="background:#f59e0b"><div class="rl">تعداد روز</div><div class="rv">' + daysTxt + '</div></div>' +
+    '<div class="ras-card" style="background:#059669"><div class="rl">تاریخ راس</div><div class="rv">' + rasTxt + '</div></div>' +
+    '</div>' +
+    '<div class="row between"><strong>لیست چک‌ها</strong><button type="button" class="btn btn-primary btn-sm" id="rasAdd">+ افزودن چک</button></div>' +
+    '<div id="rasRows">' + rowsHtml + '</div>' +
+    '<button type="button" class="btn btn-green btn-block mt" id="rasCalc">محاسبه راس</button>' +
+    '<div class="muted mt" style="white-space:pre-line;line-height:1.7">' + detail + '</div>' +
+    '</div>';
+}
+
+function bindRasPage() {
+  function syncFromDom() {
+    document.querySelectorAll('[data-ras-f]').forEach(function (inp) {
+      var i = +inp.dataset.rasI;
+      var f = inp.dataset.rasF;
+      if (!rasRows[i]) return;
+      if (f === 'amount') {
+        // نمایش با جداکننده
+        var raw = clean(inp.value);
+        rasRows[i].amount = raw;
+        var n = amount(raw);
+        if (n && String(inp.value).replace(/[^\d]/g, '').length >= 4) {
+          var pretty = fmt(n).replace(/[۰-۹]/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); });
+          // keep English digits with commas for input
+          pretty = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+          if (inp.value !== pretty && document.activeElement !== inp) inp.value = pretty;
+        }
+      } else {
+        rasRows[i][f] = inp.value;
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-ras-f]').forEach(function (inp) {
+    inp.oninput = function () {
+      var i = +inp.dataset.rasI;
+      var f = inp.dataset.rasF;
+      if (!rasRows[i]) return;
+      if (f === 'amount') {
+        var digits = en(inp.value).replace(/[^\d]/g, '');
+        rasRows[i].amount = digits;
+        // format live
+        if (digits) {
+          var pretty = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+          var pos = inp.selectionStart;
+          var oldLen = inp.value.length;
+          inp.value = pretty;
+          var newLen = pretty.length;
+          try { inp.setSelectionRange(pos + (newLen - oldLen), pos + (newLen - oldLen)); } catch (e) {}
+        }
+      } else {
+        rasRows[i][f] = inp.value;
+      }
+    };
+    inp.onkeydown = function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var i = +inp.dataset.rasI;
+      var f = inp.dataset.rasF;
+      if (f === 'date') {
+        var next = document.querySelector('[data-ras-i="' + i + '"][data-ras-f="amount"]');
+        if (next) next.focus();
+      } else if (f === 'amount') {
+        if (i === rasRows.length - 1) {
+          rasRows.push({ date: '', amount: '' });
+          go('ras');
+          setTimeout(function () {
+            var el = document.querySelector('[data-ras-i="' + (rasRows.length - 1) + '"][data-ras-f="date"]');
+            if (el) el.focus();
+          }, 50);
+        } else {
+          var n = document.querySelector('[data-ras-i="' + (i + 1) + '"][data-ras-f="date"]');
+          if (n) n.focus();
+        }
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-ras-rm]').forEach(function (b) {
+    b.onclick = function () {
+      var i = +b.dataset.rasRm;
+      rasRows.splice(i, 1);
+      if (!rasRows.length) rasRows = [{ date: '', amount: '' }];
+      go('ras');
+    };
+  });
+
+  var add = document.getElementById('rasAdd');
+  if (add) add.onclick = function () {
+    syncFromDom();
+    rasRows.push({ date: '', amount: '' });
+    go('ras');
+    setTimeout(function () {
+      var el = document.querySelector('[data-ras-i="' + (rasRows.length - 1) + '"][data-ras-f="date"]');
+      if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); }
+    }, 50);
+  };
+
+  var calc = document.getElementById('rasCalc');
+  if (calc) calc.onclick = function () {
+    syncFromDom();
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var items = [];
+    for (var i = 0; i < rasRows.length; i++) {
+      var row = rasRows[i];
+      var am = amount(row.amount);
+      if (!row.date && !am) continue;
+      var jd = parseFlexibleJalali(row.date);
+      if (!jd) {
+        alert('تاریخ ردیف ' + fa(i + 1) + ' نامعتبر است');
+        return;
+      }
+      if (!am) {
+        alert('مبلغ ردیف ' + fa(i + 1) + ' را وارد کنید');
+        return;
+      }
+      var g = jalaliToGregorian(jd.y, jd.m, jd.d);
+      var gdate = new Date(g.y, g.m - 1, g.d);
+      var delta = Math.round((gdate - today) / 86400000);
+      items.push({ amount: am, delta: delta, y: jd.y, m: jd.m, d: jd.d, gdate: gdate });
+    }
+    if (!items.length) {
+      alert('حداقل یک چک با تاریخ و مبلغ وارد کنید');
+      return;
+    }
+    items.sort(function (a, b) { return a.gdate - b.gdate; });
+    var total = items.reduce(function (s, x) { return s + x.amount; }, 0);
+    var weighted = items.reduce(function (s, x) { return s + x.amount * x.delta; }, 0);
+    var avgDays = weighted / total;
+    var avgRound = Math.round(avgDays);
+    var rasG = new Date(today.getTime());
+    rasG.setDate(rasG.getDate() + avgRound);
+    var rasJ = gregorianToJalaliNums(rasG.getFullYear(), rasG.getMonth() + 1, rasG.getDate());
+    var rasStr = formatJalaliParts(rasJ.y, rasJ.m, rasJ.d);
+    var daysTxt;
+    if (avgRound > 0) daysTxt = fa(avgRound) + ' روز بعد';
+    else if (avgRound < 0) daysTxt = fa(Math.abs(avgRound)) + ' روز قبل';
+    else daysTxt = 'امروز';
+    var details = items.map(function (x, idx) {
+      return 'چک ' + fa(idx + 1) + ': ' + fa(formatJalaliParts(x.y, x.m, x.d)) +
+        '  ·  ' + fmt(x.amount) + ' ریال  ·  ' + fa(x.delta) + ' روز';
+    });
+    rasLastResult = {
+      total: total,
+      avgDays: avgDays,
+      avgRound: avgRound,
+      daysTxt: daysTxt,
+      rasStr: rasStr,
+      detail: 'جزئیات (به ترتیب تاریخ):\n' + details.join('\n') +
+        '\n\nمیانگین وزنی: ' + fa(avgDays.toFixed(2)) + ' روز  →  راس: ' + fa(rasStr)
+    };
+    go('ras');
+  };
+}
+
+
 const titles = {
   home: 'خانه', invoices: 'حواله‌ها', inquiry: 'استعلام',
-  customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', settings: 'تنظیمات'
+  customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', ras: 'راس چک', settings: 'تنظیمات'
 };
 
 function go(page, opts) {
@@ -752,6 +1026,7 @@ function go(page, opts) {
   else if (page === 'customers') app.innerHTML = renderCustomers();
   else if (page === 'reports') app.innerHTML = renderReports();
   else if (page === 'store') app.innerHTML = renderStore();
+  else if (page === 'ras') app.innerHTML = renderRas();
   else if (page === 'settings') app.innerHTML = renderSettings();
   bindPage(page);
   if (keepScroll) {
@@ -2492,6 +2767,9 @@ function bindPage(page) {
   }
   if (page === 'store') {
     bindStorePage();
+  }
+  if (page === 'ras') {
+    bindRasPage();
   }
   if (page === 'settings') {
     document.getElementById('setSave').onclick = () => {
