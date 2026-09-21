@@ -2059,16 +2059,67 @@ function bindStorePage() {
     };
   });
   const addBtn = document.getElementById('stAddRow');
-  if (addBtn) addBtn.onclick = () => {
-    storeForm.rows.push(storeEmptyRow());
-    renderStoreRowsInto(document.getElementById('stRows'));
-    bindStoreRowEvents();
-  };
+  if (addBtn) {
+    addBtn.onclick = function (e) {
+      try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch (err) {}
+      if (!storeForm.rows) storeForm.rows = [];
+      storeForm.rows.push(storeEmptyRow());
+      const box = document.getElementById('stRows');
+      renderStoreRowsInto(box);
+      bindStoreRowEvents();
+      updateStoreTotalsUI();
+      // فوکوس روی کد/اولین فیلد ردیف جدید
+      try {
+        const last = box && box.querySelectorAll('[data-st-f="code"], [data-st-f="type"]');
+        if (last && last.length) {
+          const el = last[last.length - 1];
+          el.focus();
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch (err) {}
+    };
+  }
 
   function syncHeader() {
     storeForm.buyer = (document.getElementById('stBuyer') || {}).value || '';
     storeForm.invoiceNo = (document.getElementById('stInv') || {}).value || '';
     storeForm.date = (document.getElementById('stDate') || {}).value || '';
+  }
+
+  function updateStoreTotalsUI() {
+    const total = storeTotal();
+    document.querySelectorAll('.card .row.between.mt span.ltr').forEach(sp => {
+      if (sp.parentElement && sp.parentElement.textContent.includes('جمع')) {
+        sp.textContent = fmt(total) + ' ریال';
+      }
+    });
+  }
+
+  function updateStoreRowCostUI(i) {
+    const card = document.querySelector('[data-st-i="' + i + '"]');
+    if (!card) return;
+    const rowCard = card.closest('.card');
+    if (!rowCard) return;
+    const costB = rowCard.querySelector('.muted.mt b, .muted.mt .ltr, .muted b');
+    if (costB && storeForm.rows[i]) {
+      costB.textContent = fmt(storeForm.rows[i].cost || 0);
+    }
+    // متراژ readonly
+    if (storeForm.tab === 'parquet' && storeForm.rows[i]) {
+      const inputs = rowCard.querySelectorAll('input');
+      // متراژ معمولاً input بدون data-st-f است
+      inputs.forEach(inp => {
+        if (!inp.dataset.stF && inp.readOnly) {
+          inp.value = storeForm.rows[i].qty2 || '';
+        }
+      });
+      const typeSel = rowCard.querySelector('[data-st-f="type"]');
+      if (typeSel && storeForm.rows[i].type) {
+        typeSel.value = storeForm.rows[i].type;
+        const locked = !!productFromCode(storeForm.rows[i].code);
+        typeSel.disabled = locked;
+      }
+    }
   }
 
   function bindStoreRowEvents() {
@@ -2077,26 +2128,27 @@ function bindStorePage() {
         const i = +inp.dataset.stI;
         const f = inp.dataset.stF;
         if (!storeForm.rows[i]) return;
-        storeForm.rows[i][f] = inp.value;
-        if (f === 'code' && storeForm.tab === 'parquet') {
-          const p = productFromCode(inp.value);
-          if (p) storeForm.rows[i].type = p;
-        }
+        let val = inp.value;
         if (f === 'price') {
-          // keep digits, show formatted optionally later
+          // فقط رقم و جداکننده؛ مقدار خام در مدل
+          storeForm.rows[i][f] = val;
+        } else {
+          storeForm.rows[i][f] = val;
+        }
+        if (f === 'code' && storeForm.tab === 'parquet') {
+          const p = productFromCode(val);
+          if (p) storeForm.rows[i].type = p;
+          else if (val && !productFromCode(val)) {
+            // کد ناشناخته — نوع قابل ویرایش می‌ماند
+          }
         }
         storeRecalcRows();
-        // update cost labels by re-render is heavy; soft refresh row container
-        const pos = inp.selectionStart;
-        renderStoreRowsInto(document.getElementById('stRows'));
-        bindStoreRowEvents();
-        const totEl = document.querySelector('#stConfirm')?.previousElementSibling;
-        // update total line
-        const total = storeTotal();
-        document.querySelectorAll('.card .row.between.mt span.ltr').forEach(sp => {
-          if (sp.parentElement && sp.parentElement.textContent.includes('جمع')) sp.textContent = fmt(total) + ' ریال';
-        });
+        // بدون re-render کامل تا فوکوس از بین نرود
+        updateStoreRowCostUI(i);
+        updateStoreTotalsUI();
       };
+      // برای select
+      inp.onchange = inp.oninput;
     });
     document.querySelectorAll('[data-st-rm]').forEach(b => {
       b.onclick = () => {
@@ -2105,6 +2157,7 @@ function bindStorePage() {
         if (!storeForm.rows.length) storeForm.rows.push(storeEmptyRow());
         renderStoreRowsInto(document.getElementById('stRows'));
         bindStoreRowEvents();
+        updateStoreTotalsUI();
       };
     });
   }
