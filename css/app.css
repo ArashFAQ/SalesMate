@@ -133,3 +133,10 @@ label{font-size:12px;color:#475569;display:block}
 .sync-flash.up::before{content:"▲"}
 .sync-flash.down{color:#38bdf8}
 .sync-flash.down::before{content:"▼"}
+
+input.ltr, .ltr, .ras-date {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  text-align: center;
+  font-family: Vazirmatn, Tahoma, sans-serif;
+}

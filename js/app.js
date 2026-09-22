@@ -873,6 +873,16 @@ function parseFlexibleJalali(textIn) {
 function formatJalaliParts(y, m, d) {
   return String(y).padStart(4, '0') + '/' + String(m).padStart(2, '0') + '/' + String(d).padStart(2, '0');
 }
+function formatJalaliYmd(y, m, d) {
+  // سال/ماه/روز با ارقام فارسی — روز سمت راست
+  return fa(String(y).padStart(4, '0') + '/' + String(m).padStart(2, '0') + '/' + String(d).padStart(2, '0'));
+}
+function normalizeRasDateInput(val) {
+  var p = parseFlexibleJalali(val);
+  if (!p) return val;
+  return formatJalaliYmd(p.y, p.m, p.d);
+}
+
 
 
 function getRasBaseParts() {
@@ -889,7 +899,7 @@ function getRasBaseGDate() {
 }
 function openRasBasePicker() {
   var cur = getRasBaseParts();
-  var val = formatJalaliParts(cur.y, cur.m, cur.d);
+  var val = formatJalaliYmd(cur.y, cur.m, cur.d);
   showModal(
     '<h3>تاریخ مبدأ</h3>' +
     '<div class="muted" style="margin-bottom:8px">تاریخ مبدأ محاسبه راس را انتخاب کنید</div>' +
@@ -937,7 +947,7 @@ function openRasBasePicker() {
     calHost.querySelectorAll('[data-cal-d]').forEach(function (b) {
       b.onclick = function () {
         cur = { y: viewY, m: viewM, d: +b.dataset.calD };
-        document.getElementById('rasBaseIn').value = formatJalaliParts(cur.y, cur.m, cur.d);
+        document.getElementById('rasBaseIn').value = formatJalaliYmd(cur.y, cur.m, cur.d);
         renderCal();
       };
     });
@@ -970,16 +980,16 @@ function renderRas() {
   var rowsHtml = '';
   rasRows.forEach(function (row, i) {
     rowsHtml += '<div class="ras-row">' +
-      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="0809 یا 130706" class="ltr" inputmode="numeric" /></div>' +
+      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="۱۴۰۵/۰۹/۰۸" class="ltr ras-date" inputmode="numeric" dir="ltr" style="direction:ltr;text-align:center;font-family:Vazirmatn,Tahoma,sans-serif" /></div>' +
       '<div><label>مبلغ</label><input data-ras-f="amount" data-ras-i="' + i + '" value="' + esc(row.amount) + '" placeholder="مبلغ" class="ltr" inputmode="numeric" /></div>' +
       '<button type="button" class="btn btn-danger btn-sm" data-ras-rm="' + i + '" style="margin-bottom:2px">✕</button>' +
       '</div>';
   });
   var baseP = getRasBaseParts();
-  var baseStr = fa(formatJalaliParts(baseP.y, baseP.m, baseP.d));
+  var baseStr = formatJalaliYmd(baseP.y, baseP.m, baseP.d);
   return '' +
     '<div class="card"><h2>راس‌گیری چک</h2>' +
-    '<div class="muted">تاریخ فقط عدد: 0809=۸ شهریور امسال · 130706=۱۳ تیر ۱۴۰۶</div>' +
+    '<div class="muted">تاریخ به صورت سال/ماه/روز — مثلاً ۱۴۰۵/۰۹/۰۸</div>' +
     '<div class="list-item" id="rasBasePick" style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;margin:10px 0">' +
     '<div class="row between"><span>📅 تاریخ مبدأ</span><strong class="ltr" style="color:#9a3412">' + baseStr + '</strong></div>' +
     '<div class="muted" style="font-size:11px;margin-top:4px">برای تغییر بزنید</div></div>' +
@@ -1022,6 +1032,14 @@ function bindRasPage() {
   }
 
   document.querySelectorAll('[data-ras-f]').forEach(function (inp) {
+    if (inp.dataset.rasF === 'date') {
+      inp.onblur = function () {
+        var i = +inp.dataset.rasI;
+        var n = normalizeRasDateInput(inp.value);
+        inp.value = n;
+        if (rasRows[i]) rasRows[i].date = n;
+      };
+    }
     inp.oninput = function () {
       var i = +inp.dataset.rasI;
       var f = inp.dataset.rasF;
@@ -1121,13 +1139,13 @@ function bindRasPage() {
     var rasG = new Date(today.getTime());
     rasG.setDate(rasG.getDate() + avgRound);
     var rasJ = gregorianToJalaliNums(rasG.getFullYear(), rasG.getMonth() + 1, rasG.getDate());
-    var rasStr = formatJalaliParts(rasJ.y, rasJ.m, rasJ.d);
+    var rasStr = formatJalaliYmd(rasJ.y, rasJ.m, rasJ.d);
     var daysTxt;
     if (avgRound > 0) daysTxt = fa(avgRound) + ' روز بعد';
     else if (avgRound < 0) daysTxt = fa(Math.abs(avgRound)) + ' روز قبل';
     else daysTxt = 'روز مبدأ';
     var details = items.map(function (x, idx) {
-      return 'چک ' + fa(idx + 1) + ': ' + fa(formatJalaliParts(x.y, x.m, x.d)) +
+      return 'چک ' + fa(idx + 1) + ': ' + formatJalaliYmd(x.y, x.m, x.d) +
         '  ·  ' + fmt(x.amount) + ' ریال  ·  ' + fa(x.delta) + ' روز';
     });
     rasLastResult = {
@@ -1137,10 +1155,10 @@ function bindRasPage() {
       daysTxt: daysTxt,
       rasStr: rasStr,
       items: items,
-      baseStr: formatJalaliParts(getRasBaseParts().y, getRasBaseParts().m, getRasBaseParts().d),
-      detail: 'مبدأ: ' + fa(formatJalaliParts(getRasBaseParts().y, getRasBaseParts().m, getRasBaseParts().d)) +
+      baseStr: formatJalaliYmd(getRasBaseParts().y, getRasBaseParts().m, getRasBaseParts().d),
+      detail: 'مبدأ: ' + formatJalaliYmd(getRasBaseParts().y, getRasBaseParts().m, getRasBaseParts().d) +
         '\nجزئیات (به ترتیب تاریخ):\n' + details.join('\n') +
-        '\n\nمیانگین وزنی: ' + fa(avgDays.toFixed(2)) + ' روز  →  راس: ' + fa(rasStr)
+        '\n\nمیانگین وزنی: ' + fa(avgDays.toFixed(2)) + ' روز  →  راس: ' + rasStr
     };
     go('ras');
   };
@@ -1150,7 +1168,7 @@ function bindRasPage() {
     var itemsHtml = (r.items || []).map(function (x, idx) {
       return '<tr>' +
         '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">' + fa(idx + 1) + '</td>' +
-        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0;direction:ltr">' + fa(formatJalaliParts(x.y, x.m, x.d)) + '</td>' +
+        '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0;direction:ltr">' + formatJalaliYmd(x.y, x.m, x.d) + '</td>' +
         '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0;direction:ltr">' + fmt(x.amount) + '</td>' +
         '<td style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">' + fa(x.delta) + ' روز</td></tr>';
     }).join('');
