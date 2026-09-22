@@ -94,13 +94,35 @@ const MONTH_COLORS = ['#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899
 
 function load() {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || defaultData();
-  } catch {
+    var data = JSON.parse(localStorage.getItem(KEY));
+    if (!data || typeof data !== 'object') data = defaultData();
+    return normalizeDb(data);
+  } catch (e) {
     return defaultData();
   }
 }
+function normalizeDb(data) {
+  data = data || {};
+  if (!Array.isArray(data.invoices)) data.invoices = [];
+  if (!data.balances || typeof data.balances !== 'object') data.balances = {};
+  if (!Array.isArray(data.inquiries)) data.inquiries = [];
+  if (!Array.isArray(data.storeSales)) data.storeSales = [];
+  if (!data.company) data.company = 'SalesMate';
+  if (!data.nextId) data.nextId = 1;
+  if (!data.storeNextId) data.storeNextId = 1;
+  return data;
+}
 function defaultData() {
-  return { invoices: [], balances: {}, inquiries: [], company: 'SalesMate', nextId: 1 };
+  return {
+    invoices: [],
+    balances: {},
+    inquiries: [],
+    storeSales: [],
+    company: 'SalesMate',
+    nextId: 1,
+    storeNextId: 1,
+    updatedAt: ''
+  };
 }
 function save(data, opts) {
   opts = opts || {};
@@ -147,7 +169,7 @@ function restoreLocalBackup() {
     return null;
   }
 }
-let DB = load();
+let DB = normalizeDb(load());
 
 const SB_SESSION_KEY = 'salesmate_sb_session';
 
@@ -1039,6 +1061,7 @@ const titles = {
 
 function go(page, opts) {
   opts = opts || {};
+  try { DB = normalizeDb(DB); } catch (e) { DB = defaultData(); }
   const keepScroll = !!opts.keepScroll;
   const _sy = keepScroll ? window.scrollY : 0;
   const _ae = document.activeElement;
@@ -1049,18 +1072,32 @@ function go(page, opts) {
       _fs = '[data-r="' + _ae.dataset.r + '"][data-f="' + _ae.dataset.f + '"]';
   }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
-  document.getElementById('pageTitle').textContent = titles[page] || page;
+  var pt = document.getElementById('pageTitle');
+  if (pt) pt.textContent = titles[page] || page;
   const app = document.getElementById('app');
-  if (page === 'home') app.innerHTML = renderHome();
-  else if (page === 'invoices') app.innerHTML = renderInvoices();
-  else if (page === 'inquiry') app.innerHTML = renderInquiry();
-  else if (page === 'customers') app.innerHTML = renderCustomers();
-  else if (page === 'reports') app.innerHTML = renderReports();
-  else if (page === 'store') app.innerHTML = renderStore();
-  else if (page === 'inventory') app.innerHTML = renderInventory();
-  else if (page === 'ras') app.innerHTML = renderRas();
-  else if (page === 'settings') app.innerHTML = renderSettings();
-  bindPage(page);
+  if (!app) return;
+  try {
+    if (page === 'home') app.innerHTML = renderHome();
+    else if (page === 'invoices') app.innerHTML = renderInvoices();
+    else if (page === 'inquiry') app.innerHTML = renderInquiry();
+    else if (page === 'customers') app.innerHTML = renderCustomers();
+    else if (page === 'reports') app.innerHTML = renderReports();
+    else if (page === 'store') app.innerHTML = renderStore();
+    else if (page === 'inventory') app.innerHTML = renderInventory();
+    else if (page === 'ras') app.innerHTML = renderRas();
+    else if (page === 'settings') app.innerHTML = renderSettings();
+    else app.innerHTML = renderHome();
+    bindPage(page);
+  } catch (err) {
+    console.error('go error', page, err);
+    app.innerHTML = '<div class="card"><b style="color:#b91c1c">خطا در صفحه ' + (page || '') + '</b><div class="muted" style="margin-top:8px">' +
+      (err && err.message ? err.message : String(err)) + '</div>' +
+      '<button type="button" class="btn btn-primary btn-block mt" id="btnGoHomeErr">بازگشت به خانه</button></div>';
+    setTimeout(function () {
+      var b = document.getElementById('btnGoHomeErr');
+      if (b) b.onclick = function () { go('home'); };
+    }, 0);
+  }
   if (keepScroll) {
     window.scrollTo(0, _sy);
     if (_fs) {
