@@ -1168,7 +1168,10 @@ function bindRasPage() {
       '<div style="color:#047857;font-size:13px">میانگین وزنی</div>' +
       '<div style="font-size:18px;font-weight:800;color:#047857;margin-top:4px">' + fa((r.avgDays || 0).toFixed(2)) + ' روز</div>' +
       '<div style="margin-top:8px;font-size:16px;font-weight:800">تاریخ راس: <span style="direction:ltr;display:inline-block">' + fa(r.rasStr) + '</span></div></div></div>';
-    showInquiryPreview(inner, asImage, 'راس چک', r.total).catch(function (err) {
+    showInquiryPreview(inner, asImage, 'راس چک', r.total, {
+      shareTitle: 'راس چک‌ها',
+      shareText: 'راس چک‌ها — مبلغ کل: ' + fmt(r.total) + ' ریال'
+    }).catch(function (err) {
       alert('خروجی انجام نشد: ' + (err && err.message ? err.message : err));
     });
   }
@@ -1984,7 +1987,8 @@ async function renderInquiryToFile(innerHtml, asImage, buyer) {
   return { file: file, fileName: fileName, previewUrl: previewUrl, fileUrl: fileUrl, asImage: asImage };
 }
 
-async function showInquiryPreview(innerHtml, asImage, buyer, total) {
+async function showInquiryPreview(innerHtml, asImage, buyer, total, opts) {
+  opts = opts || {};
   showModal('<h3>در حال آماده‌سازی خروجی...</h3><div class="muted">لطفاً صبر کنید</div>');
   var result;
   try {
@@ -1999,7 +2003,7 @@ async function showInquiryPreview(innerHtml, asImage, buyer, total) {
   var previewBlock = '<img src="' + result.previewUrl + '" alt="preview" style="width:100%;border-radius:12px;border:1px solid #e2e8f0;background:#fff;display:block;" />';
 
   showModal(
-    '<h3>پیش‌نمایش استعلام (' + kind + ')</h3>' +
+    '<h3>پیش‌نمایش ' + (buyer === 'راس چک' ? 'راس چک‌ها' : 'استعلام') + ' (' + kind + ')</h3>' +
     '<div class="muted" style="margin-bottom:8px;">' + esc(buyer || '') + ' — ' + fmt(total) + ' ریال</div>' +
     '<div style="max-height:55vh;overflow:auto;margin-bottom:12px;background:#f8fafc;border-radius:12px;padding:6px;">' + previewBlock + '</div>' +
     '<button class="btn btn-primary btn-block" id="prevDownload">⬇ ذخیره / دانلود ' + kind + '</button>' +
@@ -2029,10 +2033,16 @@ async function showInquiryPreview(innerHtml, asImage, buyer, total) {
   };
   document.getElementById('prevShare').onclick = async function () {
     try {
+      var shareTitle = (opts && opts.shareTitle) || ('استعلام ' + (buyer || ''));
+      var shareText = (opts && opts.shareText) || ('استعلام کالا — جمع کل: ' + fmt(total) + ' ریال');
+      if (buyer === 'راس چک') {
+        shareTitle = (opts && opts.shareTitle) || 'راس چک‌ها';
+        shareText = (opts && opts.shareText) || ('راس چک‌ها — مبلغ کل: ' + fmt(total) + ' ریال');
+      }
       var shareData = {
         files: [result.file],
-        title: 'استعلام ' + (buyer || ''),
-        text: 'استعلام کالا — جمع کل: ' + fmt(total) + ' ریال'
+        title: shareTitle,
+        text: shareText
       };
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [result.file] })) {
         await navigator.share(shareData);
