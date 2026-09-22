@@ -94,39 +94,16 @@ const MONTH_COLORS = ['#0EA5E9','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899
 
 function load() {
   try {
-    var data = JSON.parse(localStorage.getItem(KEY));
-    if (!data || typeof data !== 'object') data = defaultData();
-    return normalizeDb(data);
-  } catch (e) {
+    return JSON.parse(localStorage.getItem(KEY)) || defaultData();
+  } catch {
     return defaultData();
   }
 }
-function normalizeDb(data) {
-  data = data || {};
-  if (!Array.isArray(data.invoices)) data.invoices = [];
-  if (!data.balances || typeof data.balances !== 'object') data.balances = {};
-  if (!Array.isArray(data.inquiries)) data.inquiries = [];
-  if (!Array.isArray(data.storeSales)) data.storeSales = [];
-  if (!data.company) data.company = 'SalesMate';
-  if (!data.nextId) data.nextId = 1;
-  if (!data.storeNextId) data.storeNextId = 1;
-  return data;
-}
 function defaultData() {
-  return {
-    invoices: [],
-    balances: {},
-    inquiries: [],
-    storeSales: [],
-    company: 'SalesMate',
-    nextId: 1,
-    storeNextId: 1,
-    updatedAt: ''
-  };
+  return { invoices: [], balances: {}, inquiries: [], company: 'SalesMate', nextId: 1 };
 }
 function save(data, opts) {
   opts = opts || {};
-  // بک‌آپ محلی قبل از هر ذخیره (برای بازیابی بعد از رفرش اشتباه)
   try {
     var prev = localStorage.getItem(KEY);
     if (prev && prev.length > 20) {
@@ -136,25 +113,7 @@ function save(data, opts) {
   } catch (e) {}
   localStorage.setItem(KEY, JSON.stringify(data));
   if (opts.skipCloud) return;
-  try { scheduleCloudPush(500, true); } catch (e) {}
-}
-function snapshotLocalDb(reason) {
-  try {
-    var prev = localStorage.getItem(KEY);
-    if (prev && prev.length > 20) {
-      localStorage.setItem('salesmate_db_backup', prev);
-      localStorage.setItem('salesmate_db_backup_at', new Date().toISOString());
-      localStorage.setItem('salesmate_db_backup_reason', String(reason || ''));
-    }
-  } catch (e) {}
-}
-function countDb(data) {
-  data = data || {};
-  return {
-    inv: (data.invoices || []).length,
-    inq: (data.inquiries || []).length,
-    store: (data.storeSales || []).length
-  };
+  try { scheduleCloudPush(1500, true); } catch (e) {}
 }
 function restoreLocalBackup() {
   try {
@@ -164,12 +123,18 @@ function restoreLocalBackup() {
     if (!data || typeof data !== 'object') return null;
     localStorage.setItem(KEY, raw);
     DB = data;
-    return countDb(data);
-  } catch (e) {
-    return null;
-  }
+    if (!Array.isArray(DB.invoices)) DB.invoices = [];
+    if (!Array.isArray(DB.inquiries)) DB.inquiries = [];
+    if (!Array.isArray(DB.storeSales)) DB.storeSales = [];
+    return {
+      inv: (DB.invoices || []).length,
+      inq: (DB.inquiries || []).length,
+      store: (DB.storeSales || []).length
+    };
+  } catch (e) { return null; }
 }
-let DB = normalizeDb(load());
+
+let DB = load();
 
 const SB_SESSION_KEY = 'salesmate_sb_session';
 
@@ -369,29 +334,15 @@ let _pushTimer = null;
 let _cloudSynced = false;
 let _cloudBusy = false;
 let _lastPullAt = 0;
-let _localDirty = false; // تغییر محلی که هنوز push نشده
+let _localDirty = false;
 let _pushQueued = false;
 function setSyncFlash(mode) {
   var el = document.getElementById('syncFlash');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'syncFlash';
-    el.className = 'sync-flash';
-    document.body.appendChild(el);
-  }
+  if (!el) return;
   el.classList.remove('up', 'down', 'on');
-  if (mode === 'up') {
-    el.classList.add('up', 'on');
-    el.textContent = '▲ ارسال';
-    el.title = 'در حال ارسال به ابر';
-  } else if (mode === 'down') {
-    el.classList.add('down', 'on');
-    el.textContent = '▼ دریافت';
-    el.title = 'در حال دریافت از ابر';
-  } else {
-    el.textContent = '';
-    el.title = '';
-  }
+  if (mode === 'up') { el.classList.add('up', 'on'); el.textContent = '▲ ارسال'; el.title = 'ارسال به ابر'; }
+  else if (mode === 'down') { el.classList.add('down', 'on'); el.textContent = '▼ دریافت'; el.title = 'دریافت از ابر'; }
+  else { el.title = ''; }
 }
 
 function scheduleCloudPush(delayMs, force) {
@@ -411,7 +362,7 @@ function scheduleCloudPush(delayMs, force) {
     pushToSupabase().then(function () {
       _localDirty = false;
     }).catch(function (e) { console.warn('cloud push', e); });
-  }, delayMs == null ? 1500 : delayMs);
+  }, delayMs == null ? 500 : delayMs);
 }
 
 function toIsoTimestamp(v) {
@@ -443,27 +394,10 @@ async function pushToSupabase() {
   if (_cloudBusy) { _pushQueued = true; return; }
   _cloudBusy = true;
   setSyncFlash('up');
+  try { DB = load(); } catch (e) {}
 
   try {
-  do {
-  _pushQueued = false;
-  // همیشه آخرین داده از localStorage
-  try { DB = load(); } catch (e) {}
   const uid = sbUser().user_id;
-  // ایمنی: اگر حافظه خالی است ولی بک‌آپ پر است، ارسال نکن
-  var nInv = (DB.invoices || []).length;
-  if (nInv === 0) {
-    try {
-      var bak = localStorage.getItem('salesmate_db_backup');
-      if (bak) {
-        var bd = JSON.parse(bak);
-        if ((bd.invoices || []).length > 0) {
-          console.warn('push aborted: empty DB vs non-empty backup');
-          break;
-        }
-      }
-    } catch (e) {}
-  }
   // پاک‌سازی timestampهای شمسی/نامعتبر در حافظه محلی
   try {
     (DB.invoices || []).forEach(function (inv) {
@@ -479,7 +413,6 @@ async function pushToSupabase() {
       s.createdAt = toIsoTimestamp(s.createdAt || s.created_at);
     });
   } catch (e) {}
-  // تعداد ابر را چک کن — اگر ابر پرتر است DELETE نکن
   var cloudCount = 0;
   try {
     var cloudList = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=invoice_no') || [];
@@ -487,8 +420,7 @@ async function pushToSupabase() {
   } catch (e) { cloudCount = 0; }
   var localCount = (DB.invoices || []).length;
   if (cloudCount > 0 && localCount < cloudCount && localCount < Math.max(1, Math.floor(cloudCount * 0.7))) {
-    console.warn('push refused: local weaker than cloud', localCount, cloudCount);
-    throw new Error('ارسال لغو شد: داده این دستگاه کم‌تر از ابر است. اول دریافت از ابر یا صبر کنید تا همه داده اینجا باشد.');
+    throw new Error('ارسال لغو شد: داده این دستگاه کم‌تر از ابر است.');
   }
   await sbFetch('DELETE', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid));
   try {
@@ -560,7 +492,6 @@ async function pushToSupabase() {
   DB.updatedAt = new Date().toISOString().slice(0, 19);
   save(DB, { skipCloud: true });
   _localDirty = false;
-  } while (_pushQueued);
   } finally {
     _cloudBusy = false;
     setSyncFlash('');
@@ -573,10 +504,9 @@ async function pushToSupabase() {
 
 
 async function autoPullFromCloud(reason) {
-  // دریافت خودکار غیرفعال — فقط اگر لوکال کاملاً خالی باشد یک‌بار از ابر پر می‌شود
   if (!sbLoggedIn()) return false;
   if (navigator.onLine === false) return false;
-  var n = (DB.invoices || []).length + (DB.inquiries || []).length + (DB.storeSales || []).length;
+  var n = (DB.invoices || []).length + (DB.inquiries || []).length + ((DB.storeSales || []).length);
   if (n > 0) {
     console.warn('auto pull skipped (local has data)', reason, n);
     return false;
@@ -587,7 +517,6 @@ async function autoPullFromCloud(reason) {
   }
   try {
     await pullFromSupabase();
-    try { await pullInventoryFromCloud(); } catch (ie) {}
     _cloudSynced = true;
     return true;
   } catch (e) {
@@ -595,74 +524,73 @@ async function autoPullFromCloud(reason) {
     return false;
   }
 }
-async function pullFromSupabase(opts) {
-  opts = opts || {};
+async function pullFromSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
   _cloudBusy = true;
   setSyncFlash('down');
   try {
-  snapshotLocalDb('before_pull');
-  const localBefore = {
-    invoices: (DB.invoices || []).slice(),
-    balances: Object.assign({}, DB.balances || {}),
-    inquiries: (DB.inquiries || []).slice(),
-    storeSales: (DB.storeSales || []).slice(),
-    company: DB.company,
-    nextId: DB.nextId,
-    storeNextId: DB.storeNextId
+  var _localSnap = {
+    inv: (DB.invoices || []).length,
+    inq: (DB.inquiries || []).length,
+    store: (DB.storeSales || []).length
   };
-  const localCounts = countDb(localBefore);
-
   const uid = sbUser().user_id;
   const invs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc') || [];
   const bals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+  var _cloudN = (invs || []).length;
+  if (_localSnap.inv + _localSnap.inq + _localSnap.store > 0 && _cloudN < _localSnap.inv && _cloudN < Math.max(1, Math.floor(_localSnap.inv * 0.7))) {
+    console.warn('safe pull: keep local', _localSnap, 'cloud inv', _cloudN);
+    _cloudSynced = true;
+    try { scheduleCloudPush(800, true); } catch (e) {}
+    return { keptLocal: true };
+  }
+  DB.invoices = invs.map((r, idx) => ({
+    id: idx + 1,
+    customer: r.customer || '',
+    invoiceNo: r.invoice_no || '',
+    date: r.date || '',
+    time: r.time || '',
+    total: String(r.total || '0'),
+    paidAmount: String(r.paid_amount || ''),
+    createdAt: String(r.created_at || ''),
+    inquiryData: r.inquiry_data || '',
+    imagePath: r.image_path || ''
+  }));
+  DB.balances = {};
+  bals.forEach(b => { if (b.customer) DB.balances[b.customer] = String(b.adjustment || '0'); });
   let cloudInqs = [];
   try {
     cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=created_at.desc') || [];
-  } catch (e) { cloudInqs = []; }
+  } catch(e) { cloudInqs = []; }
+  DB.inquiries = [];
+  cloudInqs.forEach(row => {
+    let pl = row.payload;
+    if (typeof pl === 'string') {
+      try { pl = JSON.parse(pl); } catch(e) { pl = null; }
+    }
+    if (pl && typeof pl === 'object') {
+      if (!pl.savedAt && row.created_at) pl.savedAt = String(row.created_at);
+      DB.inquiries.push(pl);
+    }
+  });
+  // فروشگاه از ابر
   let cloudStore = [];
   try {
     cloudStore = await sbFetch(
       'GET',
       '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc,id.desc'
     ) || [];
-  } catch (e) {
+  } catch(e) {
     console.warn('store_sales pull failed', e);
     cloudStore = [];
   }
-
-  const cloudInvMapped = (invs || []).map(function (r, idx) {
-    return {
-      id: idx + 1,
-      customer: r.customer || '',
-      invoiceNo: r.invoice_no || '',
-      date: r.date || '',
-      time: r.time || '',
-      total: String(r.total || '0'),
-      paidAmount: String(r.paid_amount || ''),
-      createdAt: String(r.created_at || ''),
-      inquiryData: r.inquiry_data || '',
-      imagePath: r.image_path || ''
-    };
-  });
-  const cloudInqMapped = [];
-  (cloudInqs || []).forEach(function (row) {
-    var pl = row.payload;
-    if (typeof pl === 'string') {
-      try { pl = JSON.parse(pl); } catch (e) { pl = null; }
-    }
-    if (pl && typeof pl === 'object') {
-      if (!pl.savedAt && row.created_at) pl.savedAt = String(row.created_at);
-      cloudInqMapped.push(pl);
-    }
-  });
-  const cloudStoreMapped = (cloudStore || []).map(function (r, idx) {
-    var items = [];
+  DB.storeSales = (cloudStore || []).map((r, idx) => {
+    let items = [];
     try {
       if (typeof r.items_json === 'string') items = JSON.parse(r.items_json || '[]');
       else if (Array.isArray(r.items_json)) items = r.items_json;
-    } catch (e) { items = []; }
+    } catch(e) { items = []; }
     return {
       id: idx + 1,
       customer: r.customer || '',
@@ -676,45 +604,13 @@ async function pullFromSupabase(opts) {
       createdAt: String(r.created_at || '')
     };
   });
-
-  const cloudCounts = {
-    inv: cloudInvMapped.length,
-    inq: cloudInqMapped.length,
-    store: cloudStoreMapped.length
-  };
-
-  // حفاظت: اگر ابر خالی/کم‌تر از لوکال است و لوکال داده دارد، لوکال را پاک نکن
-  var cloudWeaker =
-    (cloudCounts.inv + cloudCounts.inq + cloudCounts.store) <
-    (localCounts.inv + localCounts.inq + localCounts.store);
-  var localHasData = (localCounts.inv + localCounts.inq + localCounts.store) > 0;
-  var cloudEmpty = (cloudCounts.inv + cloudCounts.inq + cloudCounts.store) === 0;
-
-  if (!opts.force && localHasData && (cloudEmpty || cloudWeaker)) {
-    console.warn('safe pull: keep local', localCounts, 'cloud', cloudCounts);
-    // اگر لوکال پرتر است، به ابر هل بده تا ابر هم پر شود
-    _cloudSynced = true;
-    _lastPullAt = Date.now();
-    try {
-      if (!_localDirty) scheduleCloudPush(800, true);
-    } catch (e) {}
-    return { keptLocal: true, local: localCounts, cloud: cloudCounts };
-  }
-
-  DB.invoices = cloudInvMapped;
-  DB.balances = {};
-  (bals || []).forEach(function (b) {
-    if (b.customer) DB.balances[b.customer] = String(b.adjustment || '0');
-  });
-  DB.inquiries = cloudInqMapped;
-  DB.storeSales = cloudStoreMapped;
   DB.storeNextId = (DB.storeSales.length || 0) + 1;
   DB.nextId = DB.invoices.length + 1;
   DB.updatedAt = new Date().toISOString().slice(0, 19);
   _cloudSynced = true;
   _lastPullAt = Date.now();
+  // مهم: بعد از pull دیگر push نکن — وگرنه DELETE+POST ممکن است ابر را خالی کند
   save(DB, { skipCloud: true });
-  return { keptLocal: false, local: localCounts, cloud: cloudCounts };
   } finally {
     _cloudBusy = false;
     setSyncFlash('');
@@ -722,6 +618,431 @@ async function pullFromSupabase(opts) {
 }
 
 
+
+function fa(s) {
+  return String(s).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
+}
+function en(s) {
+  return String(s).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+}
+function clean(s) {
+  return en(String(s || '')).replace(/[,٬،\s]/g, '').replace(/[^\d.-]/g, '');
+}
+function amount(s) {
+  const t = clean(s);
+  if (!t || t === '-' || t === '+') return 0;
+  const neg = t.startsWith('-');
+  const n = parseInt(t.replace(/[+-]/g, '').replace(/\D/g, '') || '0', 10);
+  return neg ? -n : n;
+}
+function fmt(n) {
+  return fa(Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+}
+function words(num) {
+  num = Math.floor(Math.abs(Number(num) || 0));
+  if (num === 0) return 'صفر';
+  const ones = ['','یک','دو','سه','چهار','پنج','شش','هفت','هشت','نه'];
+  const teens = ['ده','یازده','دوازده','سیزده','چهارده','پانزده','شانزده','هفده','هجده','نوزده'];
+  const tens = ['','','بیست','سی','چهل','پنجاه','شصت','هفتاد','هشتاد','نود'];
+  const hundreds = ['','یکصد','دویست','سیصد','چهارصد','پانصد','ششصد','هفتصد','هشتصد','نهصد'];
+  const scales = ['','هزار','میلیون','میلیارد','تریلیون'];
+  function three(n) {
+    let str = '';
+    const h = Math.floor(n / 100), t = Math.floor((n % 100) / 10), o = n % 10;
+    if (h) str += hundreds[h];
+    if (t === 1) str += (str ? ' و ' : '') + teens[o];
+    else {
+      if (t) str += (str ? ' و ' : '') + tens[t];
+      if (o) str += (str ? ' و ' : '') + ones[o];
+    }
+    return str;
+  }
+  const parts = [];
+  let idx = 0, n = num;
+  while (n > 0 && idx < scales.length) {
+    const chunk = n % 1000;
+    if (chunk) {
+      let s = three(chunk);
+      if (scales[idx]) s += ' ' + scales[idx];
+      parts.unshift(s);
+    }
+    n = Math.floor(n / 1000);
+    idx++;
+  }
+  return parts.join(' و ');
+}
+
+function customerBalance(name) {
+  if (!name) return 0;
+  let bal = 0;
+  DB.invoices.filter(i => i.customer === name).forEach(i => {
+    const t = amount(i.total);
+    const p = (i.paidAmount === '' || i.paidAmount == null) ? t : amount(i.paidAmount);
+    bal += t - p;
+  });
+  bal += amount(DB.balances[name] || 0);
+  return bal;
+}
+function customerNames() {
+  const set = new Set();
+  (DB.invoices || []).forEach(i => {
+    const n = (i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  (DB.inquiries || []).forEach(i => {
+    const n = String(i.buyer || i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  (DB.storeSales || []).forEach(i => {
+    const n = (i.customer || '').trim();
+    if (n) set.add(n);
+  });
+  return [...set].sort((a, b) => a.localeCompare(b, 'fa'));
+}
+
+function refreshIqCustSuggestions(query) {
+  const scroll = document.getElementById('iqCustScroll');
+  const list = document.getElementById('custList');
+  if (!scroll && !list) return;
+  const q = String(query || '').trim();
+  const names = customerNames().filter(n => !q || n.indexOf(q) >= 0 || n.replace(/\s/g, '').indexOf(q.replace(/\s/g, '')) >= 0);
+  if (list) {
+    list.innerHTML = names.map(n => '<option value="' + esc(n) + '">').join('');
+  }
+  if (scroll) {
+    if (!names.length) {
+      scroll.innerHTML = '<span class="muted">مشتری‌ای پیدا نشد — نام جدید تایپ کنید</span>';
+    } else {
+      scroll.innerHTML = names.slice(0, 40).map(n => {
+        const b = customerBalance(n);
+        const col = b > 0 ? '#dc2626' : b < 0 ? '#16a34a' : '#64748b';
+        return '<button type="button" class="cust-chip" data-iqpick="' + esc(n) + '" style="border-color:' + col + ';color:' + col + '">' + esc(n) + '</button>';
+      }).join('');
+    }
+    scroll.querySelectorAll('[data-iqpick]').forEach(b => {
+      b.onclick = () => {
+        const el = document.getElementById('iqBuyer');
+        if (el) el.value = b.dataset.iqpick;
+        inq.buyer = b.dataset.iqpick;
+        refreshIqCustSuggestions(b.dataset.iqpick);
+      };
+    });
+  }
+}
+
+function nowJalali() {
+  // approximate Jalali from Gregorian (good enough for invoice date)
+  const g = new Date();
+  let gy = g.getFullYear(), gm = g.getMonth() + 1, gd = g.getDate();
+  const g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+  let jy = (gy <= 1600) ? 0 : 979;
+  gy -= (gy <= 1600) ? 621 : 1600;
+  let gy2 = (gm > 2) ? (gy + 1) : gy;
+  let days = (365 * gy) + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) - 80 + gd + g_d_m[gm - 1];
+  jy += 33 * Math.floor(days / 12053);
+  days %= 12053;
+  jy += 4 * Math.floor(days / 1461);
+  days %= 1461;
+  if (days > 365) {
+    jy += Math.floor((days - 1) / 365);
+    days = (days - 1) % 365;
+  }
+  const jm = (days < 186) ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+  const jd = 1 + ((days < 186) ? (days % 31) : ((days - 186) % 30));
+  const pad = n => String(n).padStart(2, '0');
+  const time = g.toTimeString().slice(0, 8);
+  return { date: jy + '/' + pad(jm) + '/' + pad(jd), time };
+}
+
+function currentYear() {
+  const years = DB.invoices.map(i => (i.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y));
+  if (!years.length) return '1405';
+  return String(Math.max(...years.map(Number)));
+}
+
+
+function salesColorMap(year) {
+  const map = {};
+  const names = customerNames();
+  const sales = names.map(n => {
+    const s = DB.invoices.filter(i => i.customer === n && (i.date || '').startsWith(year))
+      .reduce((a, i) => a + amount(i.total), 0);
+    return { n, s };
+  }).sort((a, b) => b.s - a.s);
+  const withSales = sales.filter(x => x.s > 0);
+  const n = withSales.length || 1;
+  withSales.forEach((x, i) => {
+    // green -> yellow -> red
+    const t = n === 1 ? 0 : i / (n - 1);
+    let r, g, b;
+    if (t < 0.5) {
+      const u = t / 0.5;
+      r = Math.round(34 + u * (234 - 34));
+      g = Math.round(197 + u * (179 - 197));
+      b = Math.round(94 + u * (8 - 94));
+    } else {
+      const u = (t - 0.5) / 0.5;
+      r = Math.round(234 + u * (239 - 234));
+      g = Math.round(179 + u * (68 - 179));
+      b = Math.round(8 + u * (68 - 8));
+    }
+    map[x.n] = `rgb(${r},${g},${b})`;
+  });
+  sales.filter(x => x.s <= 0).forEach(x => { map[x.n] = '#D1D5DB'; });
+  return map;
+}
+function monthKey(date) {
+  const p = (date || '').split('/');
+  if (p.length >= 2) return p[0] + '/' + p[1];
+  return date || '';
+}
+function monthTitle(key) {
+  const p = (key || '').split('/');
+  if (p.length >= 2) {
+    const mi = parseInt(p[1], 10) - 1;
+    const name = MONTHS[mi] || p[1];
+    return name + ' ' + fa(p[0]);
+  }
+  return fa(key);
+}
+
+
+/* ---------- راس‌گیری چک ---------- */
+let rasRows = [{ date: '', amount: '' }];
+let rasLastResult = null;
+let rasBaseDate = null; // {y,m,d} تاریخ مبدأ
+
+function jalaliToGregorian(jy, jm, jd) {
+  jy = parseInt(jy, 10); jm = parseInt(jm, 10); jd = parseInt(jd, 10);
+  var jy2 = jy - 979;
+  var days = 365 * jy2 + Math.floor(jy2 / 33) * 8 + Math.floor(((jy2 % 33) + 3) / 4);
+  for (var i = 1; i < jm; i++) days += (i <= 6) ? 31 : 30;
+  days += jd - 1;
+  var gdn = days + 79;
+  var gy = 1600;
+  gy += 400 * Math.floor(gdn / 146097);
+  gdn %= 146097;
+  var leap = true;
+  if (gdn >= 36525) {
+    gdn -= 1;
+    gy += 100 * Math.floor(gdn / 36524);
+    gdn %= 36524;
+    if (gdn >= 365) gdn += 1;
+    else leap = false;
+  }
+  gy += 4 * Math.floor(gdn / 1461);
+  gdn %= 1461;
+  if (gdn >= 366) {
+    leap = false;
+    gdn -= 1;
+    gy += Math.floor(gdn / 365);
+    gdn %= 365;
+  }
+  var gd = gdn + 1;
+  var gdim = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var gm = 1;
+  for (var k = 0; k < gdim.length; k++) {
+    if (gd <= gdim[k]) { gm = k + 1; break; }
+    gd -= gdim[k];
+  }
+  return { y: gy, m: gm, d: gd };
+}
+
+function gregorianToJalaliNums(gy, gm, gd) {
+  var gdim = [31, ((gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  var gy2 = gy - 1600, gm2 = gm - 1, gd2 = gd - 1;
+  var gdn = 365 * gy2 + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400);
+  for (var i = 0; i < gm2; i++) gdn += gdim[i];
+  gdn += gd2;
+  var jdn = gdn - 79;
+  var jnp = Math.floor(jdn / 12053);
+  jdn %= 12053;
+  var jy = 979 + 33 * jnp + 4 * Math.floor(jdn / 1461);
+  jdn %= 1461;
+  if (jdn >= 366) {
+    jy += Math.floor((jdn - 1) / 365);
+    jdn = (jdn - 1) % 365;
+  }
+  var jm = (jdn < 186) ? 1 + Math.floor(jdn / 31) : 7 + Math.floor((jdn - 186) / 30);
+  var jd = 1 + ((jm <= 6) ? (jdn - (jm - 1) * 31) : (jdn - 186 - (jm - 7) * 30));
+  return { y: jy, m: jm, d: jd };
+}
+
+function parseFlexibleJalali(textIn) {
+  // 0809 → روز 8 ماه 9 سال جاری | 130706 → 13/07/1406
+  var s = en(String(textIn || '')).trim().replace(/[-.]/g, '/').replace(/\s/g, '');
+  if (!s) return null;
+  var today = new Date();
+  var cur = gregorianToJalaliNums(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  var y, m, d;
+
+  if (/^\d+$/.test(s)) {
+    var digits = s;
+    var len = digits.length;
+    if (len === 1 || len === 2) {
+      d = parseInt(digits, 10); m = cur.m; y = cur.y;
+    } else if (len === 3) {
+      var d1 = parseInt(digits.slice(0, 1), 10);
+      var m2 = parseInt(digits.slice(1), 10);
+      var d2 = parseInt(digits.slice(0, 2), 10);
+      var m1 = parseInt(digits.slice(2), 10);
+      if (m2 >= 1 && m2 <= 12 && d1 >= 1 && d1 <= 31) { d = d1; m = m2; y = cur.y; }
+      else if (m1 >= 1 && m1 <= 12 && d2 >= 1 && d2 <= 31) { d = d2; m = m1; y = cur.y; }
+      else return null;
+    } else if (len === 4) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = cur.y;
+    } else if (len === 5) {
+      d = parseInt(digits.slice(0, 1), 10);
+      m = parseInt(digits.slice(1, 3), 10);
+      y = 1400 + parseInt(digits.slice(3), 10);
+    } else if (len === 6) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = 1400 + parseInt(digits.slice(4, 6), 10);
+    } else if (len === 8) {
+      d = parseInt(digits.slice(0, 2), 10);
+      m = parseInt(digits.slice(2, 4), 10);
+      y = parseInt(digits.slice(4, 8), 10);
+    } else return null;
+  } else {
+    var parts = s.split('/').filter(Boolean);
+    if (!parts.length) return null;
+    var nums = parts.map(function (p) { return parseInt(p, 10); });
+    if (nums.some(function (n) { return isNaN(n); })) return null;
+    if (nums.length === 1) { y = cur.y; m = cur.m; d = nums[0]; }
+    else if (nums.length === 2) {
+      d = nums[0]; m = nums[1];
+      if (m > 12 && d <= 12) { var tmp = d; d = m; m = tmp; }
+      y = cur.y;
+    } else {
+      var a = nums[0], b = nums[1], c = nums[2];
+      if (a > 31 || a >= 100) { y = a < 100 ? 1400 + a : a; m = b; d = c; }
+      else { d = a; m = b; y = c < 100 ? 1400 + c : c; }
+    }
+  }
+  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return { y: y, m: m, d: d };
+}
+
+function formatJalaliParts(y, m, d) {
+  return String(y).padStart(4, '0') + '/' + String(m).padStart(2, '0') + '/' + String(d).padStart(2, '0');
+}
+function formatJalaliYmd(y, m, d) {
+  // سال/ماه/روز با ارقام فارسی — روز سمت راست
+  return fa(String(y).padStart(4, '0') + '/' + String(m).padStart(2, '0') + '/' + String(d).padStart(2, '0'));
+}
+function normalizeRasDateInput(val) {
+  var p = parseFlexibleJalali(val);
+  if (!p) return val;
+  return formatJalaliYmd(p.y, p.m, p.d);
+}
+
+
+
+function getRasBaseParts() {
+  if (rasBaseDate && rasBaseDate.y) return rasBaseDate;
+  var t = new Date();
+  return gregorianToJalaliNums(t.getFullYear(), t.getMonth() + 1, t.getDate());
+}
+function getRasBaseGDate() {
+  var p = getRasBaseParts();
+  var g = jalaliToGregorian(p.y, p.m, p.d);
+  var d = new Date(g.y, g.m - 1, g.d);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function openRasBasePicker() {
+  var cur = getRasBaseParts();
+  var val = formatJalaliYmd(cur.y, cur.m, cur.d);
+  showModal(
+    '<h3>تاریخ مبدأ</h3>' +
+    '<div class="muted" style="margin-bottom:8px">تاریخ مبدأ محاسبه راس را انتخاب کنید</div>' +
+    '<label>تاریخ (مثلاً 1405/07/01 یا 0107)</label>' +
+    '<input id="rasBaseIn" class="ltr" value="' + esc(val) + '" placeholder="1405/07/01" />' +
+    '<div class="muted mt" style="font-size:12px">یا از تقویم زیر انتخاب کنید</div>' +
+    '<div id="rasCal" style="margin-top:10px"></div>' +
+    '<button class="btn btn-primary btn-block mt" id="rasBaseOk">تأیید</button>' +
+    '<button class="btn btn-secondary btn-block" id="rasBaseToday">امروز</button>' +
+    '<button class="btn btn-secondary btn-block" id="mClose">انصراف</button>'
+  );
+  // mini jalali calendar
+  var calHost = document.getElementById('rasCal');
+  var viewY = cur.y, viewM = cur.m;
+  function renderCal() {
+    var monthNames = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+    var daysInMonth = (viewM <= 6) ? 31 : (viewM <= 11 ? 30 : (((viewY % 33) % 4 === 1) ? 30 : 29));
+    // weekday of 1st
+    var g1 = jalaliToGregorian(viewY, viewM, 1);
+    var wd = new Date(g1.y, g1.m - 1, g1.d).getDay(); // 0 Sun
+    // convert to Sat=0
+    var start = (wd + 1) % 7;
+    var h = '<div class="row between" style="margin-bottom:8px">' +
+      '<button type="button" class="btn btn-sm btn-secondary" id="calPrev">‹</button>' +
+      '<strong>' + monthNames[viewM - 1] + ' ' + fa(viewY) + '</strong>' +
+      '<button type="button" class="btn btn-sm btn-secondary" id="calNext">›</button></div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:12px">';
+    ['ش','ی','د','س','چ','پ','ج'].forEach(function (x) { h += '<div class="muted">' + x + '</div>'; });
+    for (var i = 0; i < start; i++) h += '<div></div>';
+    for (var day = 1; day <= daysInMonth; day++) {
+      var sel = (viewY === cur.y && viewM === cur.m && day === cur.d);
+      h += '<button type="button" data-cal-d="' + day + '" style="padding:8px 0;border-radius:8px;border:none;background:' +
+        (sel ? '#0284c7' : '#f1f5f9') + ';color:' + (sel ? '#fff' : '#0f172a') + ';font-weight:600">' + fa(day) + '</button>';
+    }
+    h += '</div>';
+    calHost.innerHTML = h;
+    document.getElementById('calPrev').onclick = function () {
+      viewM--; if (viewM < 1) { viewM = 12; viewY--; }
+      renderCal();
+    };
+    document.getElementById('calNext').onclick = function () {
+      viewM++; if (viewM > 12) { viewM = 1; viewY++; }
+      renderCal();
+    };
+    calHost.querySelectorAll('[data-cal-d]').forEach(function (b) {
+      b.onclick = function () {
+        cur = { y: viewY, m: viewM, d: +b.dataset.calD };
+        document.getElementById('rasBaseIn').value = formatJalaliYmd(cur.y, cur.m, cur.d);
+        renderCal();
+      };
+    });
+  }
+  renderCal();
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('rasBaseToday').onclick = function () {
+    var t = new Date();
+    rasBaseDate = gregorianToJalaliNums(t.getFullYear(), t.getMonth() + 1, t.getDate());
+    hideModal();
+    go('ras');
+  };
+  document.getElementById('rasBaseOk').onclick = function () {
+    var parsed = parseFlexibleJalali(document.getElementById('rasBaseIn').value);
+    if (!parsed) { alert('تاریخ نامعتبر است'); return; }
+    rasBaseDate = parsed;
+    hideModal();
+    go('ras');
+  };
+}
+
+
+
+function loadInventory() {
+  try {
+    var raw = localStorage.getItem('salesmate_inventory');
+    if (!raw) return [];
+    var data = JSON.parse(raw);
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.items)) return data.items;
+  } catch (e) {}
+  return [];
+}
+function saveInventoryLocal(items) {
+  localStorage.setItem('salesmate_inventory', JSON.stringify({
+    items: items || [],
+    updatedAt: new Date().toISOString()
+  }));
+}
 async function pullInventoryFromCloud() {
   if (!sbLoggedIn()) return loadInventory();
   try {
@@ -1061,7 +1382,6 @@ const titles = {
 
 function go(page, opts) {
   opts = opts || {};
-  try { DB = normalizeDb(DB); } catch (e) { DB = defaultData(); }
   const keepScroll = !!opts.keepScroll;
   const _sy = keepScroll ? window.scrollY : 0;
   const _ae = document.activeElement;
@@ -1072,32 +1392,18 @@ function go(page, opts) {
       _fs = '[data-r="' + _ae.dataset.r + '"][data-f="' + _ae.dataset.f + '"]';
   }
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
-  var pt = document.getElementById('pageTitle');
-  if (pt) pt.textContent = titles[page] || page;
+  document.getElementById('pageTitle').textContent = titles[page] || page;
   const app = document.getElementById('app');
-  if (!app) return;
-  try {
-    if (page === 'home') app.innerHTML = renderHome();
-    else if (page === 'invoices') app.innerHTML = renderInvoices();
-    else if (page === 'inquiry') app.innerHTML = renderInquiry();
-    else if (page === 'customers') app.innerHTML = renderCustomers();
-    else if (page === 'reports') app.innerHTML = renderReports();
-    else if (page === 'store') app.innerHTML = renderStore();
-    else if (page === 'inventory') app.innerHTML = renderInventory();
-    else if (page === 'ras') app.innerHTML = renderRas();
-    else if (page === 'settings') app.innerHTML = renderSettings();
-    else app.innerHTML = renderHome();
-    bindPage(page);
-  } catch (err) {
-    console.error('go error', page, err);
-    app.innerHTML = '<div class="card"><b style="color:#b91c1c">خطا در صفحه ' + (page || '') + '</b><div class="muted" style="margin-top:8px">' +
-      (err && err.message ? err.message : String(err)) + '</div>' +
-      '<button type="button" class="btn btn-primary btn-block mt" id="btnGoHomeErr">بازگشت به خانه</button></div>';
-    setTimeout(function () {
-      var b = document.getElementById('btnGoHomeErr');
-      if (b) b.onclick = function () { go('home'); };
-    }, 0);
-  }
+  if (page === 'home') app.innerHTML = renderHome();
+  else if (page === 'invoices') app.innerHTML = renderInvoices();
+  else if (page === 'inquiry') app.innerHTML = renderInquiry();
+  else if (page === 'customers') app.innerHTML = renderCustomers();
+  else if (page === 'reports') app.innerHTML = renderReports();
+  else if (page === 'store') app.innerHTML = renderStore();
+  else if (page === 'inventory') app.innerHTML = renderInventory();
+  else if (page === 'ras') app.innerHTML = renderRas();
+  else if (page === 'settings') app.innerHTML = renderSettings();
+  bindPage(page);
   if (keepScroll) {
     window.scrollTo(0, _sy);
     if (_fs) {
@@ -2147,7 +2453,7 @@ function renderSettings() {
         <input type="checkbox" id="chkBackupClose" style="width:auto;margin:0" />
         پشتیبان خودکار هنگام بستن صفحه
       </label>
-      <button type="button" class="btn btn-secondary btn-block" id="btnRestoreLocal">بازیابی بک‌آپ محلی (اگر داده پرید)</button>
+      <button type="button" class="btn btn-secondary btn-block" id="btnRestoreLocal">بازیابی بک‌آپ محلی</button>
       <button type="button" id="btnSbPull">⬇ دریافت از ابر</button>
       <button class="btn btn-secondary btn-block" id="btnSbPush">⬆ ارسال به ابر</button>
     </div>
@@ -2925,10 +3231,10 @@ function bindPage(page) {
     };
     const btnRestore = document.getElementById('btnRestoreLocal');
     if (btnRestore) btnRestore.onclick = function () {
-      if (!confirm('بک‌آپ محلی قبلی بازیابی شود؟')) return;
+      if (!confirm('بک‌آپ محلی بازیابی شود؟')) return;
       var c = restoreLocalBackup();
-      if (!c) { alert('بک‌آپ محلی پیدا نشد'); return; }
-      alert('بازیابی شد — حواله: ' + fa(c.inv) + ' / استعلام: ' + fa(c.inq) + ' / فروشگاه: ' + fa(c.store));
+      if (!c) { alert('بک‌آپ پیدا نشد'); return; }
+      alert('بازیابی شد — حواله: ' + fa(c.inv) + ' / استعلام: ' + fa(c.inq));
       try { scheduleCloudPush(500, true); } catch (e) {}
       go('home');
     };
@@ -2942,15 +3248,11 @@ function bindPage(page) {
         if (_localDirty) {
           try { await pushToSupabase(); _localDirty = false; } catch (pe) { alert('اول باید تغییرات محلی ارسال شود: ' + pe.message); return; }
         }
-        var pr = await pullFromSupabase({ force: true });
+        await pullFromSupabase();
         try { await pullInventoryFromCloud(); } catch (ie) {}
         _cloudSynced = true;
         const nStore = (DB.storeSales || []).length;
-        if (pr && pr.keptLocal) {
-          alert('ابر خالی‌تر از گوشی بود — داده گوشی حفظ شد و دوباره به ابر ارسال می‌شود');
-        } else {
-          alert('داده حساب شما از ابر دریافت شد\nتعداد فروشگاه: ' + nStore);
-        }
+        alert('داده حساب شما از ابر دریافت شد\nتعداد فروشگاه: ' + nStore);
         go('home');
       } catch (e) {
         alert('خطا: ' + e.message);
@@ -3059,7 +3361,6 @@ window.addEventListener('pagehide', function () {
   try { tryBackupOnLeave(); } catch(e) {}
 });
 document.addEventListener('visibilitychange', function () {
-  // رفرش مکرر نباید داده را پاک کند — autoPull محافظت‌شده است
   if (document.visibilityState === 'hidden') {
     try { tryBackupOnLeave(); } catch(e) {}
   } else if (document.visibilityState === 'visible') {
