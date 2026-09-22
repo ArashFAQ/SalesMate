@@ -473,6 +473,7 @@ async function autoPullFromCloud(reason) {
   }
   try {
     await pullFromSupabase();
+    try { await pullInventoryFromCloud(); } catch (ie) {}
     _cloudSynced = true;
     return true;
   } catch (e) {
@@ -970,6 +971,124 @@ function openRasBasePicker() {
 }
 
 
+
+function loadInventory() {
+  try {
+    var raw = localStorage.getItem('salesmate_inventory');
+    if (!raw) return [];
+    var data = JSON.parse(raw);
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.items)) return data.items;
+  } catch (e) {}
+  return [];
+}
+function saveInventoryLocal(items) {
+  localStorage.setItem('salesmate_inventory', JSON.stringify({
+    items: items || [],
+    updatedAt: new Date().toISOString()
+  }));
+}
+async function pullInventoryFromCloud() {
+  if (!sbLoggedIn()) return loadInventory();
+  try {
+    var rows = await sbFetch('GET', '/rest/v1/inventory_items?select=*&order=product_code.asc') || [];
+    var items = rows.map(function (r) {
+      return {
+        product_code: r.product_code || '',
+        product_name: r.product_name || '',
+        cartons: Number(r.cartons || 0),
+        meters: Number(r.meters || 0),
+        design_codes: r.design_codes || ''
+      };
+    });
+    saveInventoryLocal(items);
+    return items;
+  } catch (e) {
+    console.warn('inventory pull', e);
+    return loadInventory();
+  }
+}
+function searchInventory(code) {
+  var q = en(String(code || '')).replace(/\D/g, '');
+  if (!q) return [];
+  var items = loadInventory();
+  return items.filter(function (it) {
+    var pc = en(String(it.product_code || ''));
+    var name = en(String(it.product_name || ''));
+    var dc = en(String(it.design_codes || ''));
+    if (pc.indexOf(q) >= 0) return true;
+    if (dc.split(',').some(function (c) { return c === q || c.indexOf(q) >= 0; })) return true;
+    // کد طرح داخل نام
+    if (name.indexOf(q) >= 0) return true;
+    return false;
+  });
+}
+function renderInventory() {
+  var q = window._invQuery || '';
+  var results = q ? searchInventory(q) : [];
+  var html = '<div class="card">' +
+    '<h2>موجودی کالا</h2>' +
+    '<div class="muted">کد طرح یا کد کالا را وارد کنید (فقط عدد)</div>' +
+    '<input id="invCode" class="ltr" inputmode="numeric" pattern="[0-9]*" placeholder="مثلاً 1124" value="' + esc(q) + '" style="direction:ltr;text-align:center;font-size:18px;font-weight:700;margin-top:10px" />' +
+    '<button type="button" class="btn btn-primary btn-block mt" id="invSearch">جستجو</button>' +
+    '<button type="button" class="btn btn-secondary btn-block" id="invRefresh">بروزرسانی از ابر</button>' +
+    '</div>';
+  if (!q) {
+    html += '<div class="muted" style="text-align:center;margin-top:16px">کد را وارد کنید تا مدل‌ها و موجودی نمایش داده شود</div>';
+  } else if (!results.length) {
+    html += '<div class="card" style="margin-top:12px;text-align:center">موردی برای کد <strong class="ltr">' + esc(q) + '</strong> پیدا نشد</div>';
+  } else {
+    html += '<div class="muted" style="margin:10px 0">' + fa(results.length) + ' مورد</div>';
+    results.forEach(function (it) {
+      var cart = Number(it.cartons || 0);
+      var m2 = Number(it.meters || 0);
+      var cartCls = cart <= 0 ? 'color:#b91c1c' : (cart < 20 ? 'color:#c2410c' : 'color:#047857');
+      html += '<div class="list-item" style="margin-bottom:8px">' +
+        '<div style="font-size:13px;font-weight:700;line-height:1.5">' + esc(it.product_name || '—') + '</div>' +
+        '<div class="row between" style="margin-top:8px">' +
+        '<span class="muted ltr" style="font-size:11px">' + esc(it.product_code || '') + '</span>' +
+        '<span style="font-size:11px;color:#64748b">' + esc(it.design_codes || '') + '</span></div>' +
+        '<div class="row between" style="margin-top:10px">' +
+        '<div><div class="muted" style="font-size:11px">کارتن</div><strong style="' + cartCls + ';font-size:16px" class="ltr">' + fa(Math.round(cart * 1000) / 1000) + '</strong></div>' +
+        '<div style="text-align:left"><div class="muted" style="font-size:11px">متر مربع</div><strong class="ltr" style="font-size:16px;color:#0369a1">' + fa(Math.round(m2 * 100) / 100) + '</strong></div>' +
+        '</div></div>';
+    });
+  }
+  return html;
+}
+function bindInventoryPage() {
+  var inp = document.getElementById('invCode');
+  var doSearch = function () {
+    var v = en((inp && inp.value) || '').replace(/\D/g, '');
+    if (inp) inp.value = v;
+    window._invQuery = v;
+    go('inventory');
+  };
+  if (inp) {
+    inp.setAttribute('inputmode', 'numeric');
+    inp.addEventListener('input', function () {
+      inp.value = en(inp.value).replace(/\D/g, '');
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+    });
+  }
+  var btn = document.getElementById('invSearch');
+  if (btn) btn.onclick = doSearch;
+  var ref = document.getElementById('invRefresh');
+  if (ref) ref.onclick = async function () {
+    ref.textContent = 'در حال دریافت...';
+    try {
+      await pullInventoryFromCloud();
+      alert('موجودی بروزرسانی شد: ' + fa(loadInventory().length) + ' قلم');
+      go('inventory');
+    } catch (e) {
+      alert('خطا: ' + (e.message || e));
+    }
+  };
+}
+
+
 function renderRas() {
   if (!rasRows.length) rasRows = [{ date: '', amount: '' }];
   var r = rasLastResult;
@@ -1203,7 +1322,7 @@ function bindRasPage() {
 
 const titles = {
   home: 'خانه', invoices: 'حواله‌ها', inquiry: 'استعلام',
-  customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', ras: 'راس چک', settings: 'تنظیمات'
+  customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', inventory: 'موجودی', ras: 'راس چک', settings: 'تنظیمات'
 };
 
 function go(page, opts) {
@@ -1226,6 +1345,7 @@ function go(page, opts) {
   else if (page === 'customers') app.innerHTML = renderCustomers();
   else if (page === 'reports') app.innerHTML = renderReports();
   else if (page === 'store') app.innerHTML = renderStore();
+  else if (page === 'inventory') app.innerHTML = renderInventory();
   else if (page === 'ras') app.innerHTML = renderRas();
   else if (page === 'settings') app.innerHTML = renderSettings();
   bindPage(page);
@@ -2975,6 +3095,9 @@ function bindPage(page) {
   if (page === 'store') {
     bindStorePage();
   }
+  if (page === 'inventory') {
+    bindInventoryPage();
+  }
   if (page === 'ras') {
     bindRasPage();
   }
@@ -3061,6 +3184,7 @@ function bindPage(page) {
           try { await pushToSupabase(); _localDirty = false; } catch (pe) { alert('اول باید تغییرات محلی ارسال شود: ' + pe.message); return; }
         }
         await pullFromSupabase();
+        try { await pullInventoryFromCloud(); } catch (ie) {}
         _cloudSynced = true;
         const nStore = (DB.storeSales || []).length;
         alert('داده حساب شما از ابر دریافت شد\nتعداد فروشگاه: ' + nStore);
