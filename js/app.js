@@ -1084,10 +1084,10 @@ function inventoryUnitLabels(it) {
   var blob = (name + ' ' + unit).toLowerCase();
   // MDF → ورق و پالت
   if (/mdf|ام\s*دی\s*اف|ورق|پالت/.test(blob) && !/پارکت|parquet|hdf|luxury|valente|egmont|charlotte|new\s*way|ایزوفام/.test(blob)) {
-    return { u1: 'ورق', u2: 'پالت' };
+    return { u1: 'پالت', u2: 'ورق' };
   }
-  if (/ورق|پالت/.test(blob)) return { u1: 'ورق', u2: 'پالت' };
-  if (/mdf/.test(blob)) return { u1: 'ورق', u2: 'پالت' };
+  if (/ورق|پالت/.test(blob)) return { u1: 'پالت', u2: 'ورق' };
+  if (/mdf/.test(blob)) return { u1: 'پالت', u2: 'ورق' };
   // پیش‌فرض پارکت
   return { u1: 'کارتن', u2: 'متر مربع' };
 }
