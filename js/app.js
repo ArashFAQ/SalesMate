@@ -959,8 +959,8 @@ function openRasBasePicker() {
   showModal(
     '<h3>تاریخ مبدأ</h3>' +
     '<div class="muted" style="margin-bottom:8px">تاریخ مبدأ محاسبه راس را انتخاب کنید</div>' +
-    '<label>تاریخ (مثلاً 1405/07/01 یا 0107)</label>' +
-    '<input id="rasBaseIn" class="ltr" value="' + esc(val) + '" placeholder="1405/07/01" />' +
+    '<label>تاریخ</label>' +
+    '<input id="rasBaseIn" class="ltr" value="' + esc(val) + '" placeholder="" />' +
     '<div class="muted mt" style="font-size:12px">یا از تقویم زیر انتخاب کنید</div>' +
     '<div id="rasCal" style="margin-top:10px"></div>' +
     '<button class="btn btn-primary btn-block mt" id="rasBaseOk">تأیید</button>' +
@@ -1063,49 +1063,60 @@ async function pullInventoryFromCloud() {
     return loadInventory();
   }
 }
-function searchInventory(code) {
-  var q = en(String(code || '')).replace(/\D/g, '');
+function searchInventory(query) {
+  var q = String(query || '').trim();
   if (!q) return [];
+  var qNorm = en(q).toLowerCase().replace(/\s+/g, ' ');
   var items = loadInventory();
   return items.filter(function (it) {
-    var pc = en(String(it.product_code || ''));
-    var name = en(String(it.product_name || ''));
-    var dc = en(String(it.design_codes || ''));
-    if (pc.indexOf(q) >= 0) return true;
-    if (dc.split(',').some(function (c) { return c === q || c.indexOf(q) >= 0; })) return true;
-    // کد طرح داخل نام
-    if (name.indexOf(q) >= 0) return true;
+    // فقط نام کالا
+    var name = String(it.product_name || '');
+    var nameNorm = en(name).toLowerCase().replace(/\s+/g, ' ');
+    if (nameNorm.indexOf(qNorm) >= 0) return true;
+    // بدون فاصله هم
+    if (nameNorm.replace(/\s/g, '').indexOf(qNorm.replace(/\s/g, '')) >= 0) return true;
     return false;
   });
+}
+function inventoryUnitLabels(it) {
+  var name = String((it && it.product_name) || '');
+  var unit = String((it && (it.unit || it.unit_name || it.vahed)) || '');
+  var blob = (name + ' ' + unit).toLowerCase();
+  // MDF → ورق و پالت
+  if (/mdf|ام\s*دی\s*اف|ورق|پالت/.test(blob) && !/پارکت|parquet|hdf|luxury|valente|egmont|charlotte|new\s*way|ایزوفام/.test(blob)) {
+    return { u1: 'ورق', u2: 'پالت' };
+  }
+  if (/ورق|پالت/.test(blob)) return { u1: 'ورق', u2: 'پالت' };
+  if (/mdf/.test(blob)) return { u1: 'ورق', u2: 'پالت' };
+  // پیش‌فرض پارکت
+  return { u1: 'کارتن', u2: 'متر مربع' };
 }
 function renderInventory() {
   var q = window._invQuery || '';
   var results = q ? searchInventory(q) : [];
   var html = '<div class="card">' +
     '<h2>موجودی کالا</h2>' +
-    '<div class="muted">کد طرح یا کد کالا را وارد کنید (فقط عدد)</div>' +
-    '<input id="invCode" class="ltr" inputmode="numeric" pattern="[0-9]*" placeholder="مثلاً 1124" value="' + esc(q) + '" style="direction:ltr;text-align:center;font-size:18px;font-weight:700;margin-top:10px" />' +
+    '<div class="muted">جستجو فقط روی <b>نام کالا</b></div>' +
+    '<input id="invCode" placeholder="" value="' + esc(q) + '" style="text-align:right;font-size:16px;font-weight:600;margin-top:10px" />' +
     '<button type="button" class="btn btn-primary btn-block mt" id="invSearch">جستجو</button>' +
-    '<button type="button" class="btn btn-secondary btn-block" id="invRefresh">بروزرسانی از ابر</button>' +
+    '<button type="button" class="btn btn-primary btn-block" id="invRefresh" style="margin-top:8px;background:#0369a1">⬇ دریافت موجودی از ابر</button>' +
     '</div>';
   if (!q) {
-    html += '<div class="muted" style="text-align:center;margin-top:16px">کد را وارد کنید تا مدل‌ها و موجودی نمایش داده شود</div>';
+    html += '<div class="muted" style="text-align:center;margin-top:16px">نام کالا را بنویسید</div>';
   } else if (!results.length) {
-    html += '<div class="card" style="margin-top:12px;text-align:center">موردی برای کد <strong class="ltr">' + esc(q) + '</strong> پیدا نشد</div>';
+    html += '<div class="card" style="margin-top:12px;text-align:center">موردی با نام «' + esc(q) + '» پیدا نشد</div>';
   } else {
     html += '<div class="muted" style="margin:10px 0">' + fa(results.length) + ' مورد</div>';
     results.forEach(function (it) {
       var cart = Number(it.cartons || 0);
       var m2 = Number(it.meters || 0);
+      var units = inventoryUnitLabels(it);
       var cartCls = cart <= 0 ? 'color:#b91c1c' : (cart < 20 ? 'color:#c2410c' : 'color:#047857');
       html += '<div class="list-item" style="margin-bottom:8px">' +
         '<div style="font-size:13px;font-weight:700;line-height:1.5">' + esc(it.product_name || '—') + '</div>' +
-        '<div class="row between" style="margin-top:8px">' +
-        '<span class="muted ltr" style="font-size:11px">' + esc(it.product_code || '') + '</span>' +
-        '<span style="font-size:11px;color:#64748b">' + esc(it.design_codes || '') + '</span></div>' +
         '<div class="row between" style="margin-top:10px">' +
-        '<div><div class="muted" style="font-size:11px">کارتن</div><strong style="' + cartCls + ';font-size:16px" class="ltr">' + fa(Math.round(cart * 1000) / 1000) + '</strong></div>' +
-        '<div style="text-align:left"><div class="muted" style="font-size:11px">متر مربع</div><strong class="ltr" style="font-size:16px;color:#0369a1">' + fa(Math.round(m2 * 100) / 100) + '</strong></div>' +
+        '<div><div class="muted" style="font-size:11px">' + esc(units.u1) + '</div><strong style="' + cartCls + ';font-size:16px" class="ltr">' + fa(Math.round(cart * 1000) / 1000) + '</strong></div>' +
+        '<div style="text-align:left"><div class="muted" style="font-size:11px">' + esc(units.u2) + '</div><strong class="ltr" style="font-size:16px;color:#0369a1">' + fa(Math.round(m2 * 100) / 100) + '</strong></div>' +
         '</div></div>';
     });
   }
@@ -1114,16 +1125,13 @@ function renderInventory() {
 function bindInventoryPage() {
   var inp = document.getElementById('invCode');
   var doSearch = function () {
-    var v = en((inp && inp.value) || '').replace(/\D/g, '');
-    if (inp) inp.value = v;
+    var v = String((inp && inp.value) || '').trim();
     window._invQuery = v;
     go('inventory');
   };
   if (inp) {
-    inp.setAttribute('inputmode', 'numeric');
-    inp.addEventListener('input', function () {
-      inp.value = en(inp.value).replace(/\D/g, '');
-    });
+    inp.removeAttribute('inputmode');
+    inp.removeAttribute('pattern');
     inp.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
     });
@@ -1132,6 +1140,7 @@ function bindInventoryPage() {
   if (btn) btn.onclick = doSearch;
   var ref = document.getElementById('invRefresh');
   if (ref) ref.onclick = async function () {
+    ref.disabled = true;
     ref.textContent = 'در حال دریافت...';
     try {
       await pullInventoryFromCloud();
@@ -1139,6 +1148,8 @@ function bindInventoryPage() {
       go('inventory');
     } catch (e) {
       alert('خطا: ' + (e.message || e));
+      ref.disabled = false;
+      ref.textContent = '⬇ دریافت موجودی از ابر';
     }
   };
 }
@@ -1154,7 +1165,7 @@ function renderRas() {
   var rowsHtml = '';
   rasRows.forEach(function (row, i) {
     rowsHtml += '<div class="ras-row">' +
-      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="۱۴۰۵/۰۹/۰۸" class="ltr ras-date" inputmode="numeric" dir="ltr" style="direction:ltr;text-align:center;font-family:Vazirmatn,Tahoma,sans-serif" /></div>' +
+      '<div><label>تاریخ</label><input data-ras-f="date" data-ras-i="' + i + '" value="' + esc(row.date) + '" placeholder="" class="ltr ras-date" inputmode="numeric" dir="ltr" style="direction:ltr;text-align:center;font-family:Vazirmatn,Tahoma,sans-serif" /></div>' +
       '<div><label>مبلغ</label><input data-ras-f="amount" data-ras-i="' + i + '" value="' + esc(row.amount) + '" placeholder="مبلغ" class="ltr" inputmode="numeric" /></div>' +
       '<button type="button" class="btn btn-danger btn-sm" data-ras-rm="' + i + '" style="margin-bottom:2px">✕</button>' +
       '</div>';
@@ -1163,7 +1174,7 @@ function renderRas() {
   var baseStr = formatJalaliYmd(baseP.y, baseP.m, baseP.d);
   return '' +
     '<div class="card"><h2>راس‌گیری چک</h2>' +
-    '<div class="muted">تاریخ به صورت سال/ماه/روز — مثلاً ۱۴۰۵/۰۹/۰۸</div>' +
+    '<div class="muted">تاریخ به صورت سال/ماه/روز</div>' +
     '<div class="list-item" id="rasBasePick" style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;margin:10px 0">' +
     '<div class="row between"><span>📅 تاریخ مبدأ</span><strong class="ltr" style="color:#9a3412">' + baseStr + '</strong></div>' +
     '<div class="muted" style="font-size:11px;margin-top:4px">برای تغییر بزنید</div></div>' +
