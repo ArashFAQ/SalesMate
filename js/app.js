@@ -389,113 +389,214 @@ function toIsoTimestamp(v) {
   return new Date().toISOString();
 }
 
+function syncInvKey(inv) {
+  if (!inv || typeof inv !== 'object') return '';
+  var no = en(String(inv.invoiceNo || inv.invoice_no || '')).trim();
+  var date = String(inv.date || '').trim();
+  var cust = String(inv.customer || '').trim();
+  var total = String(inv.total || '0').replace(/,/g, '').trim();
+  return [no, date, cust, total].join('|');
+}
+function syncStoreKey(s) {
+  if (!s || typeof s !== 'object') return '';
+  var no = en(String(s.invoiceNo || s.invoice_no || '')).trim();
+  var date = String(s.date || '').trim();
+  var cust = String(s.customer || '').trim();
+  var total = String(s.total || '0').replace(/,/g, '').trim();
+  return [no, date, cust, total].join('|');
+}
+function syncInqKey(item) {
+  if (!item || typeof item !== 'object') return '';
+  if (item.fingerprint || item.fp) return String(item.fingerprint || item.fp);
+  var buyer = String(item.buyer || item.customer || '').trim();
+  var date = String(item.date || '').trim();
+  var total = String(item.total || item.grandTotal || '0').trim();
+  var saved = String(item.savedAt || item.createdAt || '').slice(0, 19);
+  return [buyer, date, total, saved].join('|');
+}
+
+async function deleteInquiryFromCloud(item) {
+  if (!item || typeof item !== 'object') return false;
+  if (!sbLoggedIn()) return false;
+  try {
+    var uid = sbUser().user_id;
+    var key = syncInqKey(item);
+    if (!key) return false;
+    var cloud = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=id,payload') || [];
+    var n = 0;
+    for (var i = 0; i < cloud.length; i++) {
+      var pl = cloud[i].payload;
+      if (typeof pl === 'string') { try { pl = JSON.parse(pl); } catch (e) { continue; } }
+      if (!pl || typeof pl !== 'object') continue;
+      if (syncInqKey(pl) !== key) continue;
+      if (cloud[i].id == null) continue;
+      try {
+        await sbFetch('DELETE', '/rest/v1/inquiries?id=eq.' + cloud[i].id + '&user_id=eq.' + encodeURIComponent(uid));
+        n++;
+      } catch (e) {}
+    }
+    return n > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function pushToSupabase() {
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) { _pushQueued = true; return; }
   _cloudBusy = true;
   setSyncFlash('up');
-  try { DB = load(); } catch (e) {}
-
   try {
-  const uid = sbUser().user_id;
-  // پاک‌سازی timestampهای شمسی/نامعتبر در حافظه محلی
-  try {
-    (DB.invoices || []).forEach(function (inv) {
-      inv.createdAt = toIsoTimestamp(inv.createdAt || inv.created_at);
-    });
-    (DB.inquiries || []).forEach(function (item) {
-      if (item && typeof item === 'object') {
-        item.savedAt = toIsoTimestamp(item.savedAt || item.createdAt);
-        item.createdAt = toIsoTimestamp(item.createdAt || item.savedAt);
-      }
-    });
-    (DB.storeSales || []).forEach(function (s) {
-      s.createdAt = toIsoTimestamp(s.createdAt || s.created_at);
-    });
-  } catch (e) {}
-  var cloudCount = 0;
-  try {
-    var cloudList = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=invoice_no') || [];
-    cloudCount = cloudList.length;
-  } catch (e) { cloudCount = 0; }
-  var localCount = (DB.invoices || []).length;
-  if (cloudCount > 0 && localCount < cloudCount && localCount < Math.max(1, Math.floor(cloudCount * 0.7))) {
-    throw new Error('ارسال لغو شد: داده این دستگاه کم‌تر از ابر است.');
-  }
-  await sbFetch('DELETE', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid));
-  try {
-    await sbFetch('DELETE', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid));
-  } catch(e) {}
-  const rows = (DB.invoices || []).map(inv => ({
-    customer: inv.customer || '',
-    invoice_no: inv.invoiceNo || '',
-    date: inv.date || '',
-    time: inv.time || '',
-    total: String(inv.total || '0'),
-    paid_amount: String(inv.paidAmount != null ? inv.paidAmount : ''),
-    created_at: toIsoTimestamp(inv.createdAt || inv.created_at),
-    inquiry_data: inv.inquiryData || '',
-    image_path: inv.imagePath || '',
-    user_id: uid
-  }));
-  for (let i = 0; i < rows.length; i += 100) {
-    const chunk = rows.slice(i, i + 100);
-    if (chunk.length) await sbFetch('POST', '/rest/v1/invoices', chunk);
-  }
-  const bals = Object.entries(DB.balances || {})
-    .filter(([c]) => c)
-    .map(([customer, adjustment]) => ({
-      customer,
-      adjustment: String(adjustment),
-      note: '',
-      updated_at: new Date().toISOString(),
-      user_id: uid
-    }));
-  if (bals.length) await sbFetch('POST', '/rest/v1/customer_balances', bals);
-  try {
-    await sbFetch('DELETE', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid));
-  } catch(e) {}
-  const inqRows = (DB.inquiries || []).filter(x => x && typeof x === 'object').map(item => ({
-    payload: item,
-    user_id: uid,
-    created_at: toIsoTimestamp(item.createdAt || item.savedAt)
-  }));
-  for (let i = 0; i < inqRows.length; i += 50) {
-    const chunk = inqRows.slice(i, i + 50);
-    if (chunk.length) await sbFetch('POST', '/rest/v1/inquiries', chunk);
-  }
-  // فروشگاه
-  try {
-    await sbFetch('DELETE', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid));
-  } catch(e) {}
-  const storeRows = (DB.storeSales || []).map(s => {
-    let itemsJson = s.itemsJson;
-    if (typeof itemsJson !== 'string') {
-      itemsJson = JSON.stringify(s.items || s.itemsJson || []);
+    try { DB = load(); } catch (e) {}
+    const uid = sbUser().user_id;
+    var nInv = (DB.invoices || []).length;
+    if (nInv === 0) {
+      try {
+        var bak = localStorage.getItem('salesmate_db_backup');
+        if (bak) {
+          var bd = JSON.parse(bak);
+          if ((bd.invoices || []).length > 0) {
+            console.warn('push aborted: empty DB vs non-empty backup');
+            return;
+          }
+        }
+      } catch (e) {}
     }
-    return {
-      user_id: uid,
-      customer: s.customer || '',
-      invoice_no: s.invoiceNo || s.invoice_no || '',
-      date: s.date || '',
-      time: s.time || '',
-      total: String(s.total || '0'),
-      tab: s.tab || 'parquet',
-      items_json: itemsJson,
-      created_at: toIsoTimestamp(s.createdAt || s.created_at)
-    };
-  });
-  for (let i = 0; i < storeRows.length; i += 50) {
-    const chunk = storeRows.slice(i, i + 50);
-    if (chunk.length) await sbFetch('POST', '/rest/v1/store_sales', chunk);
-  }
-  DB.updatedAt = new Date().toISOString().slice(0, 19);
-  save(DB, { skipCloud: true });
-  _localDirty = false;
+    try {
+      (DB.invoices || []).forEach(function (inv) {
+        inv.createdAt = toIsoTimestamp(inv.createdAt || inv.created_at);
+      });
+      (DB.inquiries || []).forEach(function (item) {
+        if (item && typeof item === 'object') {
+          item.savedAt = toIsoTimestamp(item.savedAt || item.createdAt);
+          item.createdAt = toIsoTimestamp(item.createdAt || item.savedAt);
+        }
+      });
+      (DB.storeSales || []).forEach(function (s) {
+        s.createdAt = toIsoTimestamp(s.createdAt || s.created_at);
+      });
+    } catch (e) {}
+
+    // ---- invoices merge ----
+    var cloudInvs = [];
+    try {
+      cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    } catch (e) { cloudInvs = []; }
+    var cloudInvMap = {};
+    cloudInvs.forEach(function (r) {
+      var k = syncInvKey({ invoiceNo: r.invoice_no, date: r.date, customer: r.customer, total: r.total });
+      if (k) cloudInvMap[k] = r;
+    });
+    var toPost = [], toPatch = [];
+    (DB.invoices || []).forEach(function (inv) {
+      var row = {
+        customer: inv.customer || '',
+        invoice_no: inv.invoiceNo || '',
+        date: inv.date || '',
+        time: inv.time || '',
+        total: String(inv.total || '0'),
+        paid_amount: String(inv.paidAmount || ''),
+        created_at: toIsoTimestamp(inv.createdAt),
+        inquiry_data: inv.inquiryData || '',
+        image_path: inv.imagePath || '',
+        user_id: uid
+      };
+      var k = syncInvKey(inv);
+      var ex = cloudInvMap[k];
+      if (ex && ex.id != null) toPatch.push({ id: ex.id, row: row });
+      else toPost.push(row);
+    });
+    for (var i = 0; i < toPost.length; i += 80) {
+      await sbFetch('POST', '/rest/v1/invoices', toPost.slice(i, i + 80));
+    }
+    for (var p = 0; p < toPatch.length; p++) {
+      try {
+        await sbFetch('PATCH', '/rest/v1/invoices?id=eq.' + toPatch[p].id + '&user_id=eq.' + encodeURIComponent(uid), toPatch[p].row);
+      } catch (e) {}
+    }
+
+    // ---- balances ----
+    var cloudBals = [];
+    try {
+      cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    } catch (e) {}
+    var balMap = {};
+    cloudBals.forEach(function (b) { if (b.customer) balMap[b.customer] = b; });
+    var bals = DB.balances || {};
+    for (var cust in bals) {
+      if (!Object.prototype.hasOwnProperty.call(bals, cust) || !cust) continue;
+      var body = { customer: cust, adjustment: String(bals[cust]), note: '', updated_at: new Date().toISOString(), user_id: uid };
+      var exb = balMap[cust];
+      try {
+        if (exb && exb.id != null) {
+          await sbFetch('PATCH', '/rest/v1/customer_balances?id=eq.' + exb.id + '&user_id=eq.' + encodeURIComponent(uid), body);
+        } else {
+          await sbFetch('POST', '/rest/v1/customer_balances', body);
+        }
+      } catch (e) {
+        try { await sbFetch('POST', '/rest/v1/customer_balances', body); } catch (e2) {}
+      }
+    }
+
+    // ---- inquiries ----
+    var cloudInqs = [];
+    try {
+      cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    } catch (e) {}
+    var inqMap = {};
+    cloudInqs.forEach(function (r) {
+      var pl = r.payload;
+      if (typeof pl === 'string') { try { pl = JSON.parse(pl); } catch (e) { pl = {}; } }
+      if (!pl || typeof pl !== 'object') pl = {};
+      var k = syncInqKey(pl);
+      if (k) inqMap[k] = r;
+    });
+    for (var qi = 0; qi < (DB.inquiries || []).length; qi++) {
+      var item = DB.inquiries[qi];
+      if (!item || typeof item !== 'object') continue;
+      var ibody = { payload: item, user_id: uid, created_at: toIsoTimestamp(item.savedAt || item.createdAt) };
+      var iex = inqMap[syncInqKey(item)];
+      try {
+        if (iex && iex.id != null) {
+          await sbFetch('PATCH', '/rest/v1/inquiries?id=eq.' + iex.id + '&user_id=eq.' + encodeURIComponent(uid), ibody);
+        } else {
+          await sbFetch('POST', '/rest/v1/inquiries', ibody);
+        }
+      } catch (e) {}
+    }
+
+    // ---- store ----
+    var cloudStore = [];
+    try {
+      cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    } catch (e) {}
+    var stMap = {};
+    cloudStore.forEach(function (r) {
+      var k = syncStoreKey({ invoiceNo: r.invoice_no, date: r.date, customer: r.customer, total: r.total });
+      if (k) stMap[k] = r;
+    });
+    var stPost = [];
+    (DB.storeSales || []).forEach(function (s) {
+      var row = {
+        customer: s.customer || '', invoice_no: s.invoiceNo || '', date: s.date || '', time: s.time || '',
+        total: String(s.total || '0'), tab: s.tab || 'parquet', items_json: s.itemsJson || '[]',
+        created_at: toIsoTimestamp(s.createdAt), user_id: uid
+      };
+      var exs = stMap[syncStoreKey(s)];
+      if (exs && exs.id != null) {
+        sbFetch('PATCH', '/rest/v1/store_sales?id=eq.' + exs.id + '&user_id=eq.' + encodeURIComponent(uid), row).catch(function () {});
+      } else stPost.push(row);
+    });
+    for (var si = 0; si < stPost.length; si += 80) {
+      try { await sbFetch('POST', '/rest/v1/store_sales', stPost.slice(si, si + 80)); } catch (e) {}
+    }
+
+    _localDirty = false;
+    _lastPullAt = Date.now();
   } finally {
     _cloudBusy = false;
     setSyncFlash('');
-    if (_pushQueued) {
+    if (typeof _pushQueued !== 'undefined' && _pushQueued) {
       _pushQueued = false;
       try { pushToSupabase(); } catch (e) {}
     }
@@ -524,93 +625,107 @@ async function autoPullFromCloud(reason) {
     return false;
   }
 }
-async function pullFromSupabase() {
+async function pullFromSupabase(opts) {
+  opts = opts || {};
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
+  if (_localDirty && !opts.force) {
+    try { await pushToSupabase(); } catch (e) {
+      throw new Error('ابتدا ارسال محلی: ' + (e.message || e));
+    }
+  }
   _cloudBusy = true;
   setSyncFlash('down');
   try {
-  var _localSnap = {
-    inv: (DB.invoices || []).length,
-    inq: (DB.inquiries || []).length,
-    store: (DB.storeSales || []).length
-  };
-  const uid = sbUser().user_id;
-  const invs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc') || [];
-  const bals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
-  var _cloudN = (invs || []).length;
-  if (_localSnap.inv + _localSnap.inq + _localSnap.store > 0 && _cloudN < _localSnap.inv && _cloudN < Math.max(1, Math.floor(_localSnap.inv * 0.7))) {
-    console.warn('safe pull: keep local', _localSnap, 'cloud inv', _cloudN);
+    const uid = sbUser().user_id;
+    try { DB = load(); } catch (e) {}
+    if (!DB.invoices) DB.invoices = [];
+    if (!DB.balances) DB.balances = {};
+    if (!DB.inquiries) DB.inquiries = [];
+    if (!DB.storeSales) DB.storeSales = [];
+
+    var cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    var cloudBals = [];
+    try { cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
+    var cloudInqs = [];
+    try { cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
+    var cloudStore = [];
+    try { cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
+
+    var invMap = {};
+    DB.invoices.forEach(function (inv) {
+      var k = syncInvKey(inv);
+      if (k) invMap[k] = inv;
+    });
+    cloudInvs.forEach(function (r) {
+      var loc = {
+        id: 0,
+        customer: r.customer || '',
+        invoiceNo: r.invoice_no || '',
+        date: r.date || '',
+        time: r.time || '',
+        total: String(r.total || '0'),
+        paidAmount: String(r.paid_amount || ''),
+        createdAt: String(r.created_at || ''),
+        inquiryData: r.inquiry_data || '',
+        imagePath: r.image_path || ''
+      };
+      var k = syncInvKey(loc);
+      if (!k) return;
+      if (!invMap[k]) {
+        DB.invoices.push(loc);
+        invMap[k] = loc;
+      } else {
+        var cur = invMap[k];
+        if (!cur.inquiryData && loc.inquiryData) cur.inquiryData = loc.inquiryData;
+        if (!cur.paidAmount && loc.paidAmount) cur.paidAmount = loc.paidAmount;
+      }
+    });
+
+    cloudBals.forEach(function (b) {
+      if (b.customer && DB.balances[b.customer] == null) {
+        DB.balances[b.customer] = String(b.adjustment || '0');
+      }
+    });
+
+    // استعلام: ابر مرجع است — حذف‌شده‌ها از دستگاه هم می‌روند
+    var newInqs = [];
+    var seenInq = {};
+    cloudInqs.forEach(function (r) {
+      var pl = r.payload;
+      if (typeof pl === 'string') { try { pl = JSON.parse(pl); } catch (e) { return; } }
+      if (!pl || typeof pl !== 'object') return;
+      var k = syncInqKey(pl);
+      if (k && seenInq[k]) return;
+      if (k) seenInq[k] = true;
+      newInqs.push(pl);
+    });
+    DB.inquiries = newInqs;
+
+    var stMap = {};
+    DB.storeSales.forEach(function (s) {
+      var k = syncStoreKey(s);
+      if (k) stMap[k] = s;
+    });
+    cloudStore.forEach(function (r) {
+      var loc = {
+        customer: r.customer || '', invoiceNo: r.invoice_no || '', date: r.date || '', time: r.time || '',
+        total: String(r.total || '0'), tab: r.tab || 'parquet', itemsJson: r.items_json || '[]',
+        createdAt: String(r.created_at || '')
+      };
+      var k = syncStoreKey(loc);
+      if (k && !stMap[k]) {
+        DB.storeSales.push(loc);
+        stMap[k] = loc;
+      }
+    });
+
+    DB.nextId = DB.invoices.reduce(function (m, i) { return Math.max(m, i.id || 0); }, 0) + 1;
+    DB.updatedAt = new Date().toISOString().slice(0, 19);
     _cloudSynced = true;
-    try { scheduleCloudPush(800, true); } catch (e) {}
-    return { keptLocal: true };
-  }
-  DB.invoices = invs.map((r, idx) => ({
-    id: idx + 1,
-    customer: r.customer || '',
-    invoiceNo: r.invoice_no || '',
-    date: r.date || '',
-    time: r.time || '',
-    total: String(r.total || '0'),
-    paidAmount: String(r.paid_amount || ''),
-    createdAt: String(r.created_at || ''),
-    inquiryData: r.inquiry_data || '',
-    imagePath: r.image_path || ''
-  }));
-  DB.balances = {};
-  bals.forEach(b => { if (b.customer) DB.balances[b.customer] = String(b.adjustment || '0'); });
-  let cloudInqs = [];
-  try {
-    cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=created_at.desc') || [];
-  } catch(e) { cloudInqs = []; }
-  DB.inquiries = [];
-  cloudInqs.forEach(row => {
-    let pl = row.payload;
-    if (typeof pl === 'string') {
-      try { pl = JSON.parse(pl); } catch(e) { pl = null; }
-    }
-    if (pl && typeof pl === 'object') {
-      if (!pl.savedAt && row.created_at) pl.savedAt = String(row.created_at);
-      DB.inquiries.push(pl);
-    }
-  });
-  // فروشگاه از ابر
-  let cloudStore = [];
-  try {
-    cloudStore = await sbFetch(
-      'GET',
-      '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=date.desc,id.desc'
-    ) || [];
-  } catch(e) {
-    console.warn('store_sales pull failed', e);
-    cloudStore = [];
-  }
-  DB.storeSales = (cloudStore || []).map((r, idx) => {
-    let items = [];
-    try {
-      if (typeof r.items_json === 'string') items = JSON.parse(r.items_json || '[]');
-      else if (Array.isArray(r.items_json)) items = r.items_json;
-    } catch(e) { items = []; }
-    return {
-      id: idx + 1,
-      customer: r.customer || '',
-      invoiceNo: r.invoice_no || '',
-      date: r.date || '',
-      time: r.time || '',
-      total: String(r.total || '0'),
-      tab: r.tab || 'parquet',
-      items: items,
-      itemsJson: typeof r.items_json === 'string' ? r.items_json : JSON.stringify(items),
-      createdAt: String(r.created_at || '')
-    };
-  });
-  DB.storeNextId = (DB.storeSales.length || 0) + 1;
-  DB.nextId = DB.invoices.length + 1;
-  DB.updatedAt = new Date().toISOString().slice(0, 19);
-  _cloudSynced = true;
-  _lastPullAt = Date.now();
-  // مهم: بعد از pull دیگر push نکن — وگرنه DELETE+POST ممکن است ابر را خالی کند
-  save(DB, { skipCloud: true });
+    _lastPullAt = Date.now();
+    save(DB, { skipCloud: true });
+    return { merged: true, inv: DB.invoices.length, inq: DB.inquiries.length, store: DB.storeSales.length };
   } finally {
     _cloudBusy = false;
     setSyncFlash('');
@@ -2396,9 +2511,16 @@ function showSavedInquiries() {
   });
   document.querySelectorAll('[data-delinq]').forEach(b => {
     b.onclick = () => {
-      if (!confirm('حذف شود؟')) return;
-      DB.inquiries.splice(+b.dataset.delinq, 1);
+      if (!confirm('حذف شود؟\nاز ابر و بقیه دستگاه‌ها هم حذف می‌شود.')) return;
+      var idx = +b.dataset.delinq;
+      var removed = (DB.inquiries || [])[idx];
+      DB.inquiries.splice(idx, 1);
       save(DB);
+      if (removed) {
+        deleteInquiryFromCloud(removed).then(function () {
+          try { pushToSupabase(); } catch (e) {}
+        }).catch(function () {});
+      }
       showSavedInquiries();
     };
   });
@@ -3397,3 +3519,20 @@ window.addEventListener('beforeunload', function (e) {
   }
 });
 
+
+(function softCloudPollInit() {
+  setInterval(function () {
+    try {
+      if (typeof sbLoggedIn !== 'function' || !sbLoggedIn()) return;
+      if (typeof _localDirty !== 'undefined' && _localDirty) return;
+      if (typeof _cloudBusy !== 'undefined' && _cloudBusy) return;
+      if (document.hidden) return;
+      pullFromSupabase().then(function () {
+        try {
+          var active = document.querySelector('.nav-btn.active');
+          go(active ? active.dataset.page : 'home');
+        } catch (e) {}
+      }).catch(function () {});
+    } catch (e) {}
+  }, 12000);
+})();
