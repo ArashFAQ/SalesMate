@@ -607,17 +607,13 @@ async function pushToSupabase() {
 async function autoPullFromCloud(reason) {
   if (!sbLoggedIn()) return false;
   if (navigator.onLine === false) return false;
-  var n = (DB.invoices || []).length + (DB.inquiries || []).length + ((DB.storeSales || []).length);
-  if (n > 0) {
-    console.warn('auto pull skipped (local has data)', reason, n);
-    return false;
-  }
+  if (_cloudBusy) return false;
   if (_localDirty) {
     try { scheduleCloudPush(300, true); } catch (e) {}
-    return false;
+    // بعد از ارسال، ادغام از ابر
   }
   try {
-    await pullFromSupabase();
+    await pullFromSupabase({ force: true });
     _cloudSynced = true;
     return true;
   } catch (e) {
@@ -713,10 +709,19 @@ async function pullFromSupabase(opts) {
         total: String(r.total || '0'), tab: r.tab || 'parquet', itemsJson: r.items_json || '[]',
         createdAt: String(r.created_at || '')
       };
+      try { loc.items = JSON.parse(loc.itemsJson || '[]'); } catch (e) { loc.items = []; }
+      if (!Array.isArray(loc.items)) loc.items = [];
       var k = syncStoreKey(loc);
       if (k && !stMap[k]) {
         DB.storeSales.push(loc);
         stMap[k] = loc;
+      } else if (k && stMap[k]) {
+        // اگر ابر اقلام دارد و محلی خالی است، پر کن
+        var cur = stMap[k];
+        if ((!cur.items || !cur.items.length) && loc.items.length) {
+          cur.items = loc.items;
+          cur.itemsJson = loc.itemsJson;
+        }
       }
     });
 
@@ -725,7 +730,15 @@ async function pullFromSupabase(opts) {
     _cloudSynced = true;
     _lastPullAt = Date.now();
     save(DB, { skipCloud: true });
-    return { merged: true, inv: DB.invoices.length, inq: DB.inquiries.length, store: DB.storeSales.length };
+        // نرمال‌سازی اقلام فروشگاه برای نمایش کد و متراژ
+    (DB.storeSales || []).forEach(function (s) {
+      if (!s.items || !s.items.length) {
+        try { s.items = JSON.parse(s.itemsJson || s.items_json || '[]'); } catch (e) { s.items = []; }
+      }
+      if (!Array.isArray(s.items)) s.items = [];
+      if (!s.itemsJson) s.itemsJson = JSON.stringify(s.items);
+    });
+return { merged: true, inv: DB.invoices.length, inq: DB.inquiries.length, store: DB.storeSales.length };
   } finally {
     _cloudBusy = false;
     setSyncFlash('');
@@ -1554,6 +1567,15 @@ function storeWeekKey(dateStr) {
   days += d;
   return [y, Math.floor((days - 1) / 7)];
 }
+function storeParseItems(s) {
+  if (!s) return [];
+  if (Array.isArray(s.items) && s.items.length) return s.items;
+  var raw = s.itemsJson || s.items_json || '[]';
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw || '[]'); } catch (e) { raw = []; }
+  }
+  return Array.isArray(raw) ? raw : [];
+}
 function storeItemsMeterage(items) {
   let t = 0;
   (items || []).forEach(it => {
@@ -1621,7 +1643,7 @@ function renderHome() {
   let storeWeekSum = 0, storeWeekM = 0, storeMonthSum = 0, storeMonthM = 0;
   (DB.storeSales || []).forEach(s => {
     const tot = amount(s.total);
-    const meters = storeItemsMeterage(s.items || []);
+    const meters = storeItemsMeterage(storeParseItems(s));
     const parts = en(String(s.date || '')).split('/');
     const sy = parseInt(parts[0], 10), sm = parseInt(parts[1], 10);
     if (sy === parseInt(y, 10) && sm === cm) {
@@ -2689,7 +2711,7 @@ function renderStore() {
   const monthTotals = Array(12).fill(0);
   (DB.storeSales || []).forEach(s => {
     const tot = amount(s.total);
-    const meters = storeItemsMeterage(s.items || []);
+    const meters = storeItemsMeterage(storeParseItems(s));
     const parts = en(String(s.date || '')).split('/');
     const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
     if (y === cy && m === cm) { monthSum += tot; monthM += meters; }
@@ -2751,13 +2773,13 @@ function renderStore() {
       const items = groups[k];
       const [yk, wn] = k.split('-').map(Number);
       const wTot = items.reduce((s, x) => s + amount(x.total), 0);
-      const wM = items.reduce((s, x) => s + storeItemsMeterage(x.items || []), 0);
+      const wM = items.reduce((s, x) => s + storeItemsMeterage(storeParseItems(x)), 0);
       html += `<div class="day-box" style="background:#fff;border-radius:16px;padding:10px;margin-bottom:10px;border:1px solid #e2e8f0">
         <div class="day-head" style="text-align:center;font-weight:700">هفته ${fa(wn + 1)} سال ${fa(yk)} · فروش: ${fmt(wTot)} · متراژ: ${storeFmtMeter(wM)} متر</div>`;
       items.forEach(s => {
         const tabFa = s.tab === 'parquet' ? 'پارکت' : s.tab === 'mdf' ? 'ام‌دی‌اف' : 'خام';
         let lines = '';
-        (s.items || []).forEach((r, i) => {
+        storeParseItems(s).forEach((r, i) => {
           const bits = [`${fa(i + 1)})`];
           if (s.tab === 'parquet') {
             bits.push('کد ' + fa(r.code || '—'));
@@ -3013,7 +3035,7 @@ function bindStorePage() {
       storeForm.buyer = s.customer || '';
       storeForm.invoiceNo = s.invoiceNo || '';
       storeForm.date = s.date || nowJalali().date;
-      storeForm.rows = (s.items && s.items.length) ? JSON.parse(JSON.stringify(s.items)) : [storeEmptyRow()];
+      var _si = storeParseItems(s); storeForm.rows = _si.length ? JSON.parse(JSON.stringify(_si)) : [storeEmptyRow()];
       go('store');
       window.scrollTo(0, 0);
     };
@@ -3375,7 +3397,7 @@ function bindPage(page) {
     const sbPush = document.getElementById('btnSbPush');
     if (sbPull) sbPull.onclick = async () => {
       if (!sbLoggedIn()) return alert('ابتدا وارد شوید');
-      if (!confirm('داده گوشی با داده ابر (فقط حساب شما) جایگزین شود؟')) return;
+      if (!confirm('داده ابر با داده گوشی ادغام شود؟ (اطلاعات محلی پاک نمی‌شود)')) return;
       try {
         sbPull.textContent = 'در حال دریافت...';
         if (_localDirty) {
@@ -3475,10 +3497,10 @@ try {
   banner.textContent = 'در حال دریافت داده از ابر...';
   document.body.appendChild(banner);
   autoPullFromCloud('boot').then(function (ok) {
-    banner.textContent = ok ? 'داده ابر به‌روز شد' : 'دریافت از ابر ناموفق — داده محلی';
+    banner.textContent = ok ? 'داده ابر به‌روز شد' : 'ابر در دسترس نیست یا آفلاین — داده محلی';
     banner.style.background = ok ? '#059669' : '#b45309';
     if (ok) {
-      try { go(document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.page : 'home'); } catch (e) { go('home'); }
+      try { go(document.querySelector('.nav-btn.active') ? document.querySelector('.nav-btn.active').dataset.page : 'home', { keepScroll: true }); } catch (e) { go('home'); }
     }
     setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 1800);
   });
@@ -3503,7 +3525,7 @@ document.addEventListener('visibilitychange', function () {
         if (ok) {
           try {
             var active = document.querySelector('.nav-btn.active');
-            go(active ? active.dataset.page : 'home');
+            go(active ? active.dataset.page : 'home', { keepScroll: true });
           } catch (e) {}
         }
       });
@@ -3527,12 +3549,25 @@ window.addEventListener('beforeunload', function (e) {
       if (typeof _localDirty !== 'undefined' && _localDirty) return;
       if (typeof _cloudBusy !== 'undefined' && _cloudBusy) return;
       if (document.hidden) return;
+      var before = JSON.stringify({
+        inv: (DB.invoices || []).length,
+        inq: (DB.inquiries || []).length,
+        st: (DB.storeSales || []).length
+      });
       pullFromSupabase().then(function () {
         try {
-          var active = document.querySelector('.nav-btn.active');
-          go(active ? active.dataset.page : 'home');
+          var after = JSON.stringify({
+            inv: (DB.invoices || []).length,
+            inq: (DB.inquiries || []).length,
+            st: (DB.storeSales || []).length
+          });
+          // فقط اگر داده عوض شد و بدون پرش به بالا
+          if (before !== after) {
+            var active = document.querySelector('.nav-btn.active');
+            go(active ? active.dataset.page : 'home', { keepScroll: true });
+          }
         } catch (e) {}
       }).catch(function () {});
     } catch (e) {}
-  }, 12000);
+  }, 20000);
 })();
