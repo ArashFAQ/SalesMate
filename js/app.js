@@ -1186,9 +1186,32 @@ function formatInventoryTime(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return fa(String(iso));
-    var j = gregorianToJalaliNums(d.getFullYear(), d.getMonth() + 1, d.getDate());
-    var hh = String(d.getHours()).padStart(2, '0');
-    var mm = String(d.getMinutes()).padStart(2, '0');
+    // ساعت و تاریخ بر اساس تهران (نه UTC / گرینویچ)
+    var parts = {};
+    try {
+      var fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tehran',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false
+      });
+      fmt.formatToParts(d).forEach(function (p) {
+        if (p.type !== 'literal') parts[p.type] = p.value;
+      });
+    } catch (e) {
+      parts = {
+        year: String(d.getFullYear()),
+        month: String(d.getMonth() + 1),
+        day: String(d.getDate()),
+        hour: String(d.getHours()),
+        minute: String(d.getMinutes())
+      };
+    }
+    var gy = parseInt(parts.year, 10);
+    var gm = parseInt(parts.month, 10);
+    var gd = parseInt(parts.day, 10);
+    var hh = String(parseInt(parts.hour, 10) || 0).padStart(2, '0');
+    var mm = String(parseInt(parts.minute, 10) || 0).padStart(2, '0');
+    var j = gregorianToJalaliNums(gy, gm, gd);
     var ds = j.y + '/' + String(j.m).padStart(2, '0') + '/' + String(j.d).padStart(2, '0');
     return fa(ds + ' — ' + hh + ':' + mm);
   } catch (e) {
@@ -3575,6 +3598,98 @@ window.addEventListener('beforeunload', function (e) {
 });
 
 
+
+async function refreshAllFromCloud(showAlert) {
+  if (!sbLoggedIn()) {
+    if (showAlert) alert('ابتدا وارد شوید');
+    return false;
+  }
+  if (navigator.onLine === false) {
+    if (showAlert) alert('آفلاین هستید');
+    return false;
+  }
+  try {
+    setSyncFlash('down');
+    await pullFromSupabase({ force: true });
+    try { await pullInventoryFromCloud(); } catch (e) { console.warn(e); }
+    _cloudSynced = true;
+    try { _lastPullAt = Date.now(); } catch (e) {}
+    var active = document.querySelector('.nav-btn.active');
+    go(active ? active.dataset.page : 'home', { keepScroll: true });
+    if (showAlert) {
+      var n = loadInventory().length;
+      var meta = loadInventoryMeta();
+      var t = meta.uploadedAt ? formatInventoryTime(meta.uploadedAt) : '—';
+      alert('به‌روز شد\\nموجودی: ' + fa(n) + ' قلم\\nآخرین بارگذاری: ' + t);
+    }
+    return true;
+  } catch (e) {
+    if (showAlert) alert('دریافت ناموفق: ' + (e.message || e));
+    return false;
+  } finally {
+    try { setSyncFlash(''); } catch (e) {}
+  }
+}
+
+(function initPullToRefresh() {
+  var startY = 0, pulling = false;
+  var indicator = null;
+  function ensureInd() {
+    if (indicator) return indicator;
+    indicator = document.createElement('div');
+    indicator.id = 'ptrInd';
+    indicator.style.cssText = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9998;background:#0284c7;color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;font-family:Tahoma,sans-serif;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+    indicator.textContent = 'رها کنید برای به‌روزرسانی';
+    document.body.appendChild(indicator);
+    return indicator;
+  }
+  document.addEventListener('touchstart', function (e) {
+    if (!e.touches || !e.touches.length) return;
+    if (window.scrollY > 8) return;
+    startY = e.touches[0].clientY;
+    pulling = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!pulling || !e.touches || !e.touches.length) return;
+    var dy = e.touches[0].clientY - startY;
+    if (dy > 70 && window.scrollY <= 2) {
+      var ind = ensureInd();
+      ind.style.display = 'block';
+      ind.textContent = 'رها کنید برای به‌روزرسانی';
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (!pulling) return;
+    pulling = false;
+    var ind = document.getElementById('ptrInd');
+    var dy = 0;
+    try {
+      // approximate from last move - use changedTouches
+      if (e.changedTouches && e.changedTouches.length) {
+        dy = e.changedTouches[0].clientY - startY;
+      }
+    } catch (err) {}
+    if (ind) ind.style.display = 'none';
+    if (dy > 80 && window.scrollY <= 5) {
+      if (ind) {
+        ind.style.display = 'block';
+        ind.textContent = 'در حال دریافت...';
+      }
+      refreshAllFromCloud(false).then(function (ok) {
+        if (ind) {
+          ind.textContent = ok ? 'به‌روز شد' : 'ناموفق';
+          ind.style.background = ok ? '#059669' : '#b91c1c';
+          setTimeout(function () {
+            ind.style.display = 'none';
+            ind.style.background = '#0284c7';
+          }, 1200);
+        }
+      });
+    }
+  }, { passive: true });
+})();
+
+
 (function softCloudPollInit() {
   setInterval(function () {
     try {
@@ -3582,19 +3697,24 @@ window.addEventListener('beforeunload', function (e) {
       if (typeof _localDirty !== 'undefined' && _localDirty) return;
       if (typeof _cloudBusy !== 'undefined' && _cloudBusy) return;
       if (document.hidden) return;
+      var invMeta = (typeof loadInventoryMeta === 'function') ? loadInventoryMeta() : { items: [], uploadedAt: '' };
       var before = JSON.stringify({
         inv: (DB.invoices || []).length,
         inq: (DB.inquiries || []).length,
-        st: (DB.storeSales || []).length
+        st: (DB.storeSales || []).length,
+        stock: (invMeta.items || []).length,
+        up: invMeta.uploadedAt || ''
       });
       pullFromSupabase().then(function () {
         try {
+          var invMeta2 = (typeof loadInventoryMeta === 'function') ? loadInventoryMeta() : { items: [], uploadedAt: '' };
           var after = JSON.stringify({
             inv: (DB.invoices || []).length,
             inq: (DB.inquiries || []).length,
-            st: (DB.storeSales || []).length
+            st: (DB.storeSales || []).length,
+            stock: (invMeta2.items || []).length,
+            up: invMeta2.uploadedAt || ''
           });
-          // فقط اگر داده عوض شد و بدون پرش به بالا
           if (before !== after) {
             var active = document.querySelector('.nav-btn.active');
             go(active ? active.dataset.page : 'home', { keepScroll: true });
