@@ -1155,40 +1155,67 @@ function openRasBasePicker() {
 
 
 
-function loadInventory() {
+function loadInventoryMeta() {
   try {
     var raw = localStorage.getItem('salesmate_inventory');
-    if (!raw) return [];
+    if (!raw) return { items: [], uploadedAt: '', pulledAt: '' };
     var data = JSON.parse(raw);
-    if (Array.isArray(data)) return data;
-    if (data && Array.isArray(data.items)) return data.items;
-  } catch (e) {}
-  return [];
+    if (Array.isArray(data)) return { items: data, uploadedAt: '', pulledAt: '' };
+    return {
+      items: (data && data.items) || [],
+      uploadedAt: (data && (data.uploadedAt || data.updatedAt)) || '',
+      pulledAt: (data && data.pulledAt) || ''
+    };
+  } catch (e) {
+    return { items: [], uploadedAt: '', pulledAt: '' };
+  }
 }
-function saveInventoryLocal(items) {
+function loadInventory() {
+  return loadInventoryMeta().items || [];
+}
+function saveInventoryLocal(items, uploadedAt) {
   localStorage.setItem('salesmate_inventory', JSON.stringify({
     items: items || [],
+    uploadedAt: uploadedAt || '',
+    pulledAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   }));
+}
+function formatInventoryTime(iso) {
+  if (!iso) return '';
+  try {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return fa(String(iso));
+    var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    var hh = String(d.getHours()).padStart(2, '0');
+    var mm = String(d.getMinutes()).padStart(2, '0');
+    return fa(y + '/' + m + '/' + day + ' — ' + hh + ':' + mm);
+  } catch (e) {
+    return fa(String(iso));
+  }
 }
 async function pullInventoryFromCloud() {
   if (!sbLoggedIn()) return loadInventory();
   try {
     var rows = await sbFetch('GET', '/rest/v1/inventory_items?select=*&order=product_code.asc') || [];
+    var maxUp = '';
     var items = rows.map(function (r) {
+      var up = r.updated_at || '';
+      if (up && (!maxUp || up > maxUp)) maxUp = up;
       return {
         product_code: r.product_code || '',
         product_name: r.product_name || '',
         cartons: Number(r.cartons || 0),
         meters: Number(r.meters || 0),
-        design_codes: r.design_codes || ''
+        design_codes: r.design_codes || '',
+        updated_at: up
       };
     });
-    saveInventoryLocal(items);
+    saveInventoryLocal(items, maxUp);
     return items;
   } catch (e) {
     console.warn('inventory pull', e);
-    return loadInventory();
+    throw e;
   }
 }
 function searchInventory(query) {
@@ -1222,9 +1249,14 @@ function inventoryUnitLabels(it) {
 function renderInventory() {
   var q = window._invQuery || '';
   var results = q ? searchInventory(q) : [];
+  var meta = (typeof loadInventoryMeta === 'function') ? loadInventoryMeta() : { items: loadInventory(), uploadedAt: '' };
+  var nAll = (meta.items || []).length;
+  var upTxt = meta.uploadedAt ? formatInventoryTime(meta.uploadedAt) : '—';
   var html = '<div class="card">' +
     '<h2>موجودی کالا</h2>' +
     '<div class="muted">جستجو فقط روی <b>نام کالا</b></div>' +
+    '<div class="muted" style="margin-top:6px;line-height:1.7">آخرین بارگذاری اکسل (ویندوز): <b style="color:#0369a1">' + upTxt + '</b>' +
+    '<br>تعداد قلم: ' + fa(nAll) + '</div>' +
     '<input id="invCode" placeholder="" value="' + esc(q) + '" style="text-align:right;font-size:16px;font-weight:600;margin-top:10px" />' +
     '<button type="button" class="btn btn-primary btn-block mt" id="invSearch">جستجو</button>' +
     '<button type="button" class="btn btn-primary btn-block" id="invRefresh" style="margin-top:8px;background:#0369a1">⬇ دریافت موجودی از ابر</button>' +
