@@ -2012,6 +2012,84 @@ function openBalanceModal(name) {
   };
 }
 
+
+function aggregateCodeSales(year) {
+  var agg = {};
+  function add(code, typ, qty1, qty2, cost) {
+    code = en(String(code || '').trim());
+    if (!code || code === '—' || code === '-') return;
+    if (!agg[code]) agg[code] = { meters: 0, cartons: 0, amount: 0, types: {} };
+    var m = parseFloat(en(String(qty2 || '0')).replace(/,/g, '')) || 0;
+    var c = parseFloat(en(String(qty1 || '0')).replace(/,/g, '')) || 0;
+    agg[code].meters += m;
+    agg[code].cartons += c;
+    agg[code].amount += amount(cost);
+    if (typ) agg[code].types[String(typ)] = true;
+  }
+  (DB.invoices || []).forEach(function (inv) {
+    if (!(inv.date || '').startsWith(String(year))) return;
+    var data = inv.inquiryData;
+    if (!data) return;
+    try { if (typeof data === 'string') data = JSON.parse(data); } catch (e) { return; }
+    if (!data || !data.rows) return;
+    (data.rows || []).forEach(function (r) {
+      add(r.code, r.type || r.typ, r.qty1, r.qty2, r.cost);
+    });
+  });
+  (DB.storeSales || []).forEach(function (s) {
+    if (!(s.date || '').startsWith(String(year))) return;
+    var items = s.items;
+    if (!items || !items.length) {
+      try { items = JSON.parse(s.itemsJson || '[]'); } catch (e) { items = []; }
+    }
+    (items || []).forEach(function (r) {
+      add(r.code, r.type || r.typ, r.qty1, r.qty2, r.cost);
+    });
+  });
+  var list = Object.keys(agg).map(function (code) {
+    var d = agg[code];
+    return {
+      code: code,
+      meters: d.meters,
+      cartons: d.cartons,
+      amount: d.amount,
+      types: Object.keys(d.types).join('، ') || '—'
+    };
+  });
+  list.sort(function (a, b) { return b.meters - a.meters || b.amount - a.amount; });
+  return list;
+}
+function fmtMeterVal(v) {
+  if (!v) return fa('0');
+  var s = String(Number(v).toFixed(4)).replace(/\.?0+$/, '');
+  return fa(s);
+}
+function renderCodeSalesBlock(year) {
+  var list = aggregateCodeSales(year);
+  var html = '<div class="card mt"><h2>فروش به تفکیک کد کالا</h2>';
+  html += '<div class="muted" style="margin-bottom:10px">حواله + فروشگاه · مرتب بر اساس متراژ</div>';
+  if (!list.length) {
+    html += '<div class="empty">اقلام کددار برای این سال نیست</div></div>';
+    return html;
+  }
+  var tm = 0, tc = 0, ta = 0;
+  list.forEach(function (it) {
+    tm += it.meters; tc += it.cartons; ta += it.amount;
+    html += '<div class="list-item" style="border-right:4px solid #0284c7;margin-bottom:8px">' +
+      '<div class="row between"><strong class="ltr">' + fa(it.code) + '</strong>' +
+      '<span style="color:#059669;font-weight:800">' + fmt(it.amount) + '</span></div>' +
+      '<div class="muted" style="font-size:12px">' + esc(it.types) + '</div>' +
+      '<div class="row between" style="margin-top:6px">' +
+      '<span style="color:#0284c7;font-weight:700">' + fmtMeterVal(it.meters) + ' متر</span>' +
+      '<span>' + fa(Math.round(it.cartons * 100) / 100) + ' کارتن</span></div></div>';
+  });
+  html += '<div class="stat" style="margin-top:10px"><div class="label">جمع</div>' +
+    '<div class="value" style="font-size:14px">' + fmtMeterVal(tm) + ' م · ' +
+    fa(Math.round(tc * 10) / 10) + ' کارتن · ' + fmt(ta) + '</div></div>';
+  html += '</div>';
+  return html;
+}
+
 /* ---------- REPORTS ---------- */
 function renderReports() {
   const y = currentYear();
@@ -2040,6 +2118,7 @@ function renderReports() {
   });
   html += `</div>`;
   html += `<div class="card mt"><h2>نمودار فروش</h2>${buildChartSvg(totals)}</div>`;
+  html += renderCodeSalesBlock(y);
   return html;
 }
 
@@ -3197,6 +3276,7 @@ function bindPage(page) {
           html += `<div class="month-box" style="background:${MONTH_COLORS[i]}"><div class="m">${name}</div><div class="v">${fmt(totals[i])}</div></div>`;
         });
         html += `</div><div class="card mt"><h2>نمودار فروش</h2>${buildChartSvg(totals)}</div>`;
+        html += renderCodeSalesBlock(yy);
         document.getElementById('app').innerHTML = html;
         bindPage('reports');
       };
