@@ -1186,10 +1186,11 @@ function formatInventoryTime(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return fa(String(iso));
-    var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+    var j = gregorianToJalaliNums(d.getFullYear(), d.getMonth() + 1, d.getDate());
     var hh = String(d.getHours()).padStart(2, '0');
     var mm = String(d.getMinutes()).padStart(2, '0');
-    return fa(y + '/' + m + '/' + day + ' — ' + hh + ':' + mm);
+    var ds = j.y + '/' + String(j.m).padStart(2, '0') + '/' + String(j.d).padStart(2, '0');
+    return fa(ds + ' — ' + hh + ':' + mm);
   } catch (e) {
     return fa(String(iso));
   }
