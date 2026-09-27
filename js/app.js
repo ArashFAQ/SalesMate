@@ -64,6 +64,9 @@ const CODE_TO_PRODUCT = {};
 ['443','126','444','452','442','456','114','453'].forEach(c => { CODE_TO_PRODUCT[c] = 'Egmont'; });
 ['9015','9010','9025','9020','9072','9052','9055','9059','9040','9050'].forEach(c => { CODE_TO_PRODUCT[c] = 'New Way'; });
 
+const CONTACTS_SEED = [{"first_name": "بهزاد", "last_name": "جعفری", "company": "ایران پارکت", "phone": "04136372997", "mobile": "09148059100", "city": "تبریز", "address": "تبریز — آزادی حدفاصل چهارراه ابوریحان آخر شهناز"}, {"first_name": "نوید", "last_name": "شریعتی", "company": "راشا", "phone": "", "mobile": "09211694929", "city": "قائم شهر", "address": "قائم شهر — کمربندی میدان جانبازان به امام، بعد از بهار نارنج57، جنب پل سیاهرود"}, {"first_name": "مجید", "last_name": "نیک‌پور", "company": "بازرگانی نیک‌پور", "phone": "04432239275", "mobile": "09143451106", "city": "ارومیه", "address": "ارومیه — خیابان مدنی 2، پایین‌تر از مسجد ابوصائب، طبقه همکف"}, {"first_name": "محمد", "last_name": "قنبری", "company": "شرکت مانی تجارت آماج", "phone": "33288703", "mobile": "09123027648", "city": "تهران", "address": "تهران — سایت خاوران، خیابان صنوبر2 پلاک 2823"}, {"first_name": "احسان", "last_name": "آذرنیا", "company": "طرح ‌آذین", "phone": "44019344", "mobile": "09126663527", "city": "تهران", "address": "تهران — بزرگراه ستاری جنوب، ابتدای پیامبر غربی، ساختمان مهستان"}, {"first_name": "محمد رضا", "last_name": "مرادی", "company": "", "phone": "33282411", "mobile": "09123280616", "city": "تهران", "address": "تهران — پل چوبی"}, {"first_name": "حسن", "last_name": "امیرزاده", "company": "دکوراسیون نایس", "phone": "04533259030", "mobile": "09148095718", "city": "اردبیل", "address": "اردبیل — بزرگراه شهدا، نبش چهارراه ججین، طبقه اول"}, {"first_name": "مرتضی", "last_name": "چوپانی", "company": "دکوراسیون چوپانی", "phone": "حاج رحیم 09121249691", "mobile": "09119517934", "city": "رامسر", "address": "رامسر — کتالم،خیابان شهید بهشتی، شهرک انصار"}, {"first_name": "محمد رضا", "last_name": "هرندی زاده", "company": "بازرگانی هرندی‌زاه", "phone": "محمد رضا  09131273915", "mobile": "ابراهیم   09133017150", "city": "اصفهان", "address": "اصفهان — فلکه فیض، خیابان فیض، فر.شگاه پارسه نبش کوچه 3"}, {"first_name": "منصور", "last_name": "یوسفی", "company": "فانیک", "phone": "01133378821", "mobile": "09113121450", "city": "آمل - ساری", "address": "آمل - ساری — ساری، میدان امام، کیلومتر 3 جاده جویبار"}, {"first_name": "رضا", "last_name": "حسن زاده", "company": "دکوری نو /پارکت لند", "phone": "55916637 55938762", "mobile": "09196003806", "city": "شهر ری/ سایت خاوران", "address": "شهر ری/ سایت خاوران — میدان ساعی، بلوار شهید آوینی، مجتمع صدف"}, {"first_name": "ناصر", "last_name": "فخاریان", "company": "پردیس", "phone": "07632245048", "mobile": "09171612397", "city": "بندرعباس", "address": "بندرعباس — بلوار امام خمینی، غرب چهارراه ابوذر، خیابان شریعتی شمال، نبش کوچه قوام 2"}, {"first_name": "احمد", "last_name": "رحیمی", "company": "نیما", "phone": "55177969", "mobile": "09123893595", "city": "چهاردانگه", "address": "چهاردانگه — شهرک صنعتی چهاردانگه، حدفاصل خیابان 22.5 و 23، پلاک 269"}, {"first_name": "حمید رضا", "last_name": "حاجی صادقی", "company": "زیبا چوب", "phone": "02433330417", "mobile": "09125413915", "city": "زنجان", "address": "زنجان — دروازه رشت، خیابان امام خمینی، بلوار خواجه نصیر"}, {"first_name": "هادی", "last_name": "جعفری", "company": "افرا", "phone": "02333363452", "mobile": "09125195488", "city": "سمنان", "address": "سمنان — بلوار شهید صدیقی (باغ فامیلی)، بین فرعی 8 و 10"}, {"first_name": "محمد", "last_name": "جعفری", "company": "والسا", "phone": "05832222915", "mobile": "0912-6803247", "city": "بجنورد", "address": "بجنورد — خیابان 17 شهریور جنوبی، نرسیده به چهار راه باسکول"}, {"first_name": "حسین", "last_name": "شیبی", "company": "بازرگانی شیبی", "phone": "035-36272738", "mobile": "09131576995", "city": "یزد", "address": "یزد — خیابان سلمان فارسی،روبروی کوچه گودرزیعلیرضا ضمیراءی"}, {"first_name": "علیرضا", "last_name": "ضمیرائی", "company": "ضمیرائی", "phone": "02133283008", "mobile": "09123081815", "city": "تهران", "address": "تهران — سایت خاوران،خیابان افرا دوم، پلاک 7103"}, {"first_name": "", "last_name": "ایرانی نژاد", "company": "شرکت آنیل چوب آریا", "phone": "09039169121", "mobile": "09149141807", "city": "ارومیه", "address": "ارومیه — جاده شهید کلانتری، کوی حصار، بازرگانی ایرانی نژاد"}, {"first_name": "نام", "last_name": "نام خانوادگی", "company": "نام موسسه", "phone": "تلفن", "mobile": "همراه", "city": "آدرس", "address": "آدرس"}, {"first_name": "حافظ", "last_name": "امامی", "company": "شهر پارکت", "phone": "65571930", "mobile": "09127665260", "city": "اندیشه", "address": "اندیشه — فاز 1، کندرو،پلاک 36"}, {"first_name": "خسرو", "last_name": "باقری", "company": "رومانتیک", "phone": "021-44074164", "mobile": "09122646625", "city": "تهران", "address": "تهران — خیابان ایت الله کاشانی،روبروی پمپ بنزین،پلاک 162"}, {"first_name": "محمدرضا", "last_name": "کمالی", "company": "اروین دکور", "phone": "021-44354901", "mobile": "09126591508", "city": "تهران", "address": "تهران — شهران،بلوار کوهسار،خیابان فرهنگ،زیر برج کوهسار"}, {"first_name": "مزدک", "last_name": "مرجانی", "company": "بازرگانی مرجانی", "phone": "", "mobile": "09181320053", "city": "کرمانشاه", "address": "کرمانشاه — دیزل آباد نرسیده به زندان مرکزی"}, {"first_name": "شرکت کیان نقش بلیغ", "last_name": "", "company": "نمایشگاه", "phone": "محمد استاد  09354800939", "mobile": "حمید رضا یوسفی  09128403898", "city": "تهران", "address": "تهران — نمایشگاه بین المللی"}, {"first_name": "مازیار", "last_name": "نبی زاده", "company": "تجهیز دکور باروس", "phone": "09120701097", "mobile": "", "city": "رشت", "address": "رشت — میدان تختی، بلوار لب آب"}, {"first_name": "پارسا", "last_name": "جمشیدی", "company": "تجهیز دکور باروس", "phone": "09120317008", "mobile": "", "city": "نوشهر", "address": "نوشهر — خیابان بابا طاهر"}, {"first_name": "امیر", "last_name": "افشارزاده", "company": "راجیس (نیووی)", "phone": "02144008546", "mobile": "09128116855", "city": "تهران", "address": "تهران — بلوار آیت الله کاشانی، خیابان بهنام، کوچه بهنام یکم، پلاک 1، واحد 5 - شماره ثابت 44002546"}, {"first_name": "مسعود", "last_name": "علایی", "company": "کاج کابین", "phone": "", "mobile": "09123879318", "city": "چالوس", "address": "چالوس — بلوار امام رضا، بورسر، جنب اهن آلات حسین نژاد"}, {"first_name": "محمد رضا", "last_name": "تقی نژاد", "company": "آتلانتیس", "phone": "02144057483", "mobile": "09127151618", "city": "تهران", "address": "تهران — بلوار آیت الله کاشانی، نبش خیابان وفا آذر، ابتدای لاین کندرو، پلاک 330"}, {"first_name": "حسین", "last_name": "علیخانی", "company": "مجموعه فتوحی", "phone": "021-34115", "mobile": "09121642725", "city": "کرج", "address": "کرج — کمالشهر، بلوار پیام سه راه گوهر دشت، دکوراسیون ترمه"}, {"first_name": "محمد", "last_name": "امانلو", "company": "پخش کاغذ دیواری طاهافر", "phone": "04513833576", "mobile": "09120412520", "city": "زنجان", "address": "زنجان — خیابان بعثت،خیابان نقی بنایی"}, {"first_name": "محمد", "last_name": "محمودی", "company": "کالای چوب محمودی", "phone": "09125089778", "mobile": "نوید 09125017134", "city": "شهر زیبا", "address": "شهر زیبا — خیابان احمد کاشانی، پلاک 49 و106"}, {"first_name": "حسین", "last_name": "اسکندری", "company": "دکوراسیون ماهر", "phone": "", "mobile": "09181114245", "city": "همدان", "address": "همدان — خیابان طالقانی، نرسیده به بانک صادرات"}, {"first_name": "حامد", "last_name": "حقیقت", "company": "فروشکاه یشیل", "phone": "09151126640", "mobile": "زولیخایی 09155091966", "city": "مشهد", "address": "مشهد — بزرگراه آزادی، پیامبر اعظم 43، پلاک 50"}, {"first_name": "", "last_name": "عسگری", "company": "نقشینه", "phone": "", "mobile": "09127329902", "city": "لار", "address": "لار — شهر جدید،20 متری، جنب ساندویچ کلبه"}, {"first_name": "", "last_name": "موسویان", "company": "ژکوند", "phone": "", "mobile": "09131847949", "city": "شهر کرد", "address": "شهر کرد — خیابان حافظ شمالی،بالاتر از 3 راه دامپزشکی"}, {"first_name": "آرین", "last_name": "عارفی", "company": "ایده معمار", "phone": "", "mobile": "09133873436", "city": "کرمان", "address": "کرمان — کمربندی امام رضا، حدفاصلپل کوثر وفرهنگیان"}, {"first_name": "فرشید", "last_name": "مقدم", "company": "مدرن دیزاین", "phone": "02144004900", "mobile": "09122949891", "city": "تهران", "address": "تهران — صادقیه، بلوارفردوس شرقی، روبروی گلستان شمالی، برج افرا، ط یک"}, {"first_name": "نام", "last_name": "نام خانوادگی", "company": "نام موسسه", "phone": "تلفن", "mobile": "همراه", "city": "آدرس", "address": "آدرس"}, {"first_name": "فرشاد", "last_name": "حاتمی", "company": "دیبا شهر", "phone": "", "mobile": "09143222176", "city": "مراغه", "address": "مراغه — کمربندی شمالی پایین تر از میدان کریمی نبش کوی الهیه"}, {"first_name": "", "last_name": "ریئسی", "company": "ویستا افرند", "phone": "88430356", "mobile": "09026376560", "city": "سهروردی", "address": "سهروردی — ابتدای سهروردی جنوبی، بن بست نفیسی، پلاک 2 واحد 3"}, {"first_name": "یوسف", "last_name": "محمدی", "company": "آذرتاش", "phone": "", "mobile": "09143268482", "city": "اهر", "address": "اهر — خیابان صاحب زمان،روبروی جانبو"}, {"first_name": "", "last_name": "بناکار", "company": "برنا", "phone": "", "mobile": "09173027547", "city": "شیراز", "address": "شیراز — بلوار استقلال ،نبش بلوار بعثت"}, {"first_name": "بهرام", "last_name": "ضرغامی", "company": "لوکس دکور", "phone": "", "mobile": "09121097899", "city": "تهران", "address": "تهران — سعادت آباد،بالاتر از میدان کاج"}, {"first_name": "امیرحسین", "last_name": "خوشنام", "company": "زیبا سازان", "phone": "", "mobile": "09155621953", "city": "بیرجند", "address": "بیرجند — خیابان مدرس،نبش مدرس 65"}, {"first_name": "", "last_name": "کشاورز", "company": "فروشگاه هدایتی", "phone": "", "mobile": "09122826630", "city": "قزوین", "address": "قزوین — ابتدای نادری شمالی، روبروی درب بیمارستان بوعلی،"}, {"first_name": "حسین", "last_name": "مسجد سرائی", "company": "بی نظیر", "phone": "", "mobile": "09123511436", "city": "قم", "address": "قم — بلوار عطاران، نبش کوچه7"}, {"first_name": "جواد", "last_name": "احمدی", "company": "دکوراسیون طوس", "phone": "", "mobile": "09119517934", "city": "گرگان", "address": "گرگان — خیابان 5 اذر،"}, {"first_name": "عباس", "last_name": "شیخ زاده", "company": "دنیای فرش", "phone": "", "mobile": "برفیان 09194932100", "city": "تهران", "address": "تهران — افسریه، پایینتر از پل 20 متری افسریه ، پشت دیوار نرده ای پلاک 332"}, {"first_name": "", "last_name": "تهرانی", "company": "دکوراسیون سهروردی", "phone": "", "mobile": "09111719473", "city": "گرگان", "address": "گرگان — نبش ورودی پمپ بنزین گلشهر، فروشگاه ترموود"}, {"first_name": "محمد", "last_name": "نجفی", "company": "دایانا", "phone": "", "mobile": "09173027547", "city": "شیراز", "address": "شیراز — چهارراه خلد برین،بلوار بعثت"}, {"first_name": "", "last_name": "گودرزی", "company": "کیا دکور", "phone": "", "mobile": "09163652838", "city": "بروجرد", "address": "بروجرد"}, {"first_name": "خشایار", "last_name": "شادمند/افسری", "company": "9126067012", "phone": "33280901", "mobile": "09122385798", "city": "سایت چوب", "address": "سایت چوب — خاوران-خ صنوبر 3-پلاک 2115"}];
+const CONTACTS_KEY = 'salesmate_contacts_v1';
+
 function productFromCode(code) {
   const key = en(String(code || '').trim());
   return CODE_TO_PRODUCT[key] || null;
@@ -1270,6 +1273,211 @@ function inventoryUnitLabels(it) {
   // پیش‌فرض پارکت
   return { u1: 'کارتن', u2: 'متر مربع' };
 }
+
+/* ---------- CONTACTS (اطلاعات مشتری‌ها — مشترک) ---------- */
+function loadContacts() {
+  try {
+    var raw = localStorage.getItem(CONTACTS_KEY);
+    if (raw) {
+      var d = JSON.parse(raw);
+      if (Array.isArray(d) && d.length) return d;
+      if (d && Array.isArray(d.items) && d.items.length) return d.items;
+    }
+  } catch (e) {}
+  // seed
+  try {
+    if (CONTACTS_SEED && CONTACTS_SEED.length) {
+      saveContacts(CONTACTS_SEED);
+      return CONTACTS_SEED.slice();
+    }
+  } catch (e) {}
+  return [];
+}
+function saveContacts(items) {
+  try {
+    localStorage.setItem(CONTACTS_KEY, JSON.stringify({ items: items || [], updatedAt: new Date().toISOString() }));
+  } catch (e) {}
+}
+async function pushContactsToCloud() {
+  if (!sbSessionValid()) throw new Error('وارد حساب شوید');
+  var items = loadContacts();
+  try {
+    await sbFetch('DELETE', '/rest/v1/customer_contacts?id=gt.0');
+  } catch (e) {
+    try { await sbFetch('DELETE', '/rest/v1/customer_contacts?updated_at=not.is.null'); } catch (e2) {}
+  }
+  var rows = items.map(function (it) {
+    return {
+      first_name: it.first_name || '',
+      last_name: it.last_name || '',
+      company: it.company || '',
+      phone: it.phone || '',
+      mobile: it.mobile || '',
+      city: it.city || '',
+      address: it.address || '',
+      updated_at: new Date().toISOString()
+    };
+  });
+  for (var i = 0; i < rows.length; i += 40) {
+    var chunk = rows.slice(i, i + 40);
+    if (chunk.length) await sbFetch('POST', '/rest/v1/customer_contacts', chunk);
+  }
+  return rows.length;
+}
+async function pullContactsFromCloud() {
+  if (!sbSessionValid()) throw new Error('وارد حساب شوید');
+  var data = await sbFetch('GET', '/rest/v1/customer_contacts?select=*&order=id.asc') || [];
+  var items = (data || []).map(function (r) {
+    return {
+      first_name: r.first_name || '',
+      last_name: r.last_name || '',
+      company: r.company || '',
+      phone: r.phone || '',
+      mobile: r.mobile || '',
+      city: r.city || '',
+      address: r.address || ''
+    };
+  });
+  if (items.length) saveContacts(items);
+  return items;
+}
+function renderContacts() {
+  var q = (window._contactsQ || '').trim().toLowerCase();
+  var items = loadContacts();
+  if (q) {
+    items = items.filter(function (it) {
+      var blob = [it.first_name, it.last_name, it.company, it.city, it.phone, it.mobile, it.address].join(' ').toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+  }
+  var html = '<div class="card"><h2>اطلاعات مشتری‌ها</h2>';
+  html += '<p class="muted" style="font-size:12px">لیست مشترک نمایندگان — همه کاربران یکسان</p>';
+  html += '<input id="ctSearch" placeholder="جستجو نام، موسسه، شهر، موبایل…" value="' + esc(window._contactsQ || '') + '" />';
+  html += '<div class="actions mt" style="flex-wrap:wrap;gap:6px">';
+  html += '<button class="btn btn-primary btn-sm" id="ctAdd">+ جدید</button>';
+  html += '<button class="btn btn-secondary btn-sm" id="ctSeed">بارگذاری لیست</button>';
+  html += '<button class="btn btn-secondary btn-sm" id="ctPush">ارسال ابر</button>';
+  html += '<button class="btn btn-secondary btn-sm" id="ctPull">دریافت ابر</button>';
+  html += '</div>';
+  html += '<div class="muted mt">نمایش ' + fa(items.length) + ' مورد</div></div>';
+  if (!items.length) html += '<div class="empty">موردی نیست — بارگذاری لیست را بزنید</div>';
+  items.forEach(function (it, idx) {
+    var name = ((it.first_name || '') + ' ' + (it.last_name || '')).trim() || '—';
+    html += '<div class="card" style="border-right:4px solid #0284c7">';
+    html += '<div class="row between"><strong>' + esc(name) + '</strong><span class="muted">' + esc(it.company || '') + '</span></div>';
+    if (it.city) html += '<div class="muted">📍 ' + esc(it.city) + '</div>';
+    var ph = [];
+    if (it.mobile) ph.push('موبایل: ' + fa(it.mobile));
+    if (it.phone) ph.push('تلفن: ' + fa(it.phone));
+    if (ph.length) html += '<div style="font-size:13px;font-weight:600;margin-top:4px">' + ph.join(' | ') + '</div>';
+    if (it.address) html += '<div class="muted" style="font-size:12px;margin-top:4px">' + esc(it.address) + '</div>';
+    html += '<div class="actions mt"><button class="btn btn-secondary btn-sm" data-ct-edit="' + idx + '">ویرایش</button>';
+    html += '<button class="btn btn-danger btn-sm" data-ct-del="' + idx + '">حذف</button></div></div>';
+  });
+  return html;
+}
+function bindContactsPage() {
+  var s = document.getElementById('ctSearch');
+  if (s) s.oninput = function () {
+    window._contactsQ = s.value;
+    document.getElementById('app').innerHTML = renderContacts();
+    bindContactsPage();
+  };
+  var add = document.getElementById('ctAdd');
+  if (add) add.onclick = function () { openContactModal(null, -1); };
+  var seed = document.getElementById('ctSeed');
+  if (seed) seed.onclick = function () {
+    var cur = loadContacts();
+    if (!cur.length) {
+      saveContacts(CONTACTS_SEED.slice());
+      alert('لیست نمایندگان بارگذاری شد: ' + fa(CONTACTS_SEED.length));
+    } else {
+      if (!confirm('لیست فعلی ' + fa(cur.length) + ' مورد دارد. با لیست کامل اکسل جایگزین شود؟')) return;
+      saveContacts(CONTACTS_SEED.slice());
+      alert('جایگزین شد: ' + fa(CONTACTS_SEED.length));
+    }
+    go('contacts');
+  };
+  var push = document.getElementById('ctPush');
+  if (push) push.onclick = function () {
+    pushContactsToCloud().then(function (n) { alert('ارسال شد: ' + fa(n)); }).catch(function (e) { alert(String(e.message || e)); });
+  };
+  var pull = document.getElementById('ctPull');
+  if (pull) pull.onclick = function () {
+    pullContactsFromCloud().then(function (items) {
+      alert('دریافت شد: ' + fa(items.length));
+      go('contacts');
+    }).catch(function (e) { alert(String(e.message || e)); });
+  };
+  // edit/del use filtered index - better store key
+  var all = loadContacts();
+  var q = (window._contactsQ || '').trim().toLowerCase();
+  var filtered = all;
+  if (q) {
+    filtered = all.filter(function (it) {
+      var blob = [it.first_name, it.last_name, it.company, it.city, it.phone, it.mobile, it.address].join(' ').toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+  }
+  document.querySelectorAll('[data-ct-edit]').forEach(function (b) {
+    b.onclick = function () {
+      var it = filtered[+b.dataset.ctEdit];
+      if (!it) return;
+      var realIdx = all.findIndex(function (x) {
+        return x.mobile === it.mobile && x.company === it.company && x.first_name === it.first_name && x.last_name === it.last_name;
+      });
+      openContactModal(it, realIdx >= 0 ? realIdx : -1);
+    };
+  });
+  document.querySelectorAll('[data-ct-del]').forEach(function (b) {
+    b.onclick = function () {
+      if (!confirm('حذف شود؟')) return;
+      var it = filtered[+b.dataset.ctDel];
+      if (!it) return;
+      var next = all.filter(function (x) {
+        return !(x.mobile === it.mobile && x.company === it.company && x.first_name === it.first_name && x.last_name === it.last_name);
+      });
+      saveContacts(next);
+      go('contacts');
+    };
+  });
+}
+function openContactModal(item, idx) {
+  item = item || {};
+  showModal(
+    '<h3>' + (idx >= 0 ? 'ویرایش تماس' : 'تماس جدید') + '</h3>' +
+    '<label>نام</label><input id="ctFn" value="' + esc(item.first_name || '') + '" />' +
+    '<label>نام خانوادگی</label><input id="ctLn" value="' + esc(item.last_name || '') + '" />' +
+    '<label>موسسه</label><input id="ctCo" value="' + esc(item.company || '') + '" />' +
+    '<label>تلفن</label><input id="ctPh" value="' + esc(item.phone || '') + '" inputmode="tel" />' +
+    '<label>همراه</label><input id="ctMb" value="' + esc(item.mobile || '') + '" inputmode="tel" />' +
+    '<label>شهر</label><input id="ctCity" value="' + esc(item.city || '') + '" />' +
+    '<label>آدرس</label><input id="ctAddr" value="' + esc(item.address || '') + '" />' +
+    '<button class="btn btn-primary btn-block" id="ctSave">ذخیره</button>' +
+    '<button class="btn btn-secondary btn-block" id="mClose">انصراف</button>'
+  );
+  document.getElementById('mClose').onclick = hideModal;
+  document.getElementById('ctSave').onclick = function () {
+    var row = {
+      first_name: document.getElementById('ctFn').value.trim(),
+      last_name: document.getElementById('ctLn').value.trim(),
+      company: document.getElementById('ctCo').value.trim(),
+      phone: document.getElementById('ctPh').value.trim(),
+      mobile: document.getElementById('ctMb').value.trim(),
+      city: document.getElementById('ctCity').value.trim(),
+      address: document.getElementById('ctAddr').value.trim()
+    };
+    var items = loadContacts();
+    if (idx >= 0 && idx < items.length) items[idx] = row;
+    else items.push(row);
+    saveContacts(items);
+    hideModal();
+    go('contacts');
+    try { pushContactsToCloud(); } catch (e) {}
+  };
+}
+
+
 function renderInventory() {
   var q = window._invQuery || '';
   var results = q ? searchInventory(q) : [];
@@ -1572,7 +1780,7 @@ function bindRasPage() {
 
 const titles = {
   home: 'خانه', invoices: 'حواله‌ها', inquiry: 'استعلام',
-  customers: 'مشتریان', reports: 'گزارش‌ها', store: 'فروشگاه', inventory: 'موجودی', ras: 'راس چک', settings: 'تنظیمات'
+  customers: 'مشتریان', contacts: 'اطلاعات مشتری‌ها', reports: 'گزارش‌ها', store: 'فروشگاه', inventory: 'موجودی', ras: 'راس چک', settings: 'تنظیمات'
 };
 
 function go(page, opts) {
@@ -1593,6 +1801,7 @@ function go(page, opts) {
   else if (page === 'invoices') app.innerHTML = renderInvoices();
   else if (page === 'inquiry') app.innerHTML = renderInquiry();
   else if (page === 'customers') app.innerHTML = renderCustomers();
+  else if (page === 'contacts') app.innerHTML = renderContacts();
   else if (page === 'reports') app.innerHTML = renderReports();
   else if (page === 'store') app.innerHTML = renderStore();
   else if (page === 'inventory') app.innerHTML = renderInventory();
@@ -1896,51 +2105,222 @@ function openInvoiceInquiry(inv) {
   openInquiryExport(false, { skipSave: true });
 }
 
+
+
 function openInvoiceModal(inv) {
-  const isNew = !inv;
-  const nj = nowJalali();
-  inv = inv || { customer: '', invoiceNo: '', date: nj.date, time: nj.time, total: '', paidAmount: '' };
+  var isNew = !inv;
+  var nj = nowJalali();
+  inv = inv || { customer: '', invoiceNo: '', date: nj.date, time: nj.time, total: '', paidAmount: '', inquiryData: '' };
   if (isNew) {
     inv.date = inv.date || nj.date;
     inv.time = inv.time || nj.time;
   }
-  const names = customerNames();
-  const opts = names.map(n => `<option value="${esc(n)}" ${n === inv.customer ? 'selected' : ''}>${esc(n)}</option>`).join('');
-  showModal(`
-    <h3>${isNew ? 'حواله جدید' : 'ویرایش حواله'}</h3>
-    <label>مشتری</label>
-    <input id="mCust" list="mCustList" value="${esc(inv.customer)}" placeholder="نام یا انتخاب از لیست" />
-    <datalist id="mCustList">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
-    <div class="cust-scroll">${names.map(n => `<button type="button" class="cust-chip" data-pick="${esc(n)}">${esc(n)}</button>`).join('') || '<span class="muted">هنوز مشتری‌ای نیست</span>'}</div>
-    <label>شماره حواله</label><input id="mNo" value="${esc(inv.invoiceNo)}" />
-    <label>تاریخ شمسی</label><input id="mDate" value="${esc(inv.date)}" placeholder="1405/01/01" />
-    <label>ساعت</label><input id="mTime" value="${esc(inv.time || nj.time)}" placeholder="14:30:00" />
-    <label>مبلغ کل</label><input id="mTotal" value="${esc(inv.total)}" inputmode="numeric" />
-    <label>مبلغ پرداختی</label><input id="mPaid" value="${esc(inv.paidAmount !== '' && inv.paidAmount != null ? inv.paidAmount : inv.total)}" inputmode="numeric" />
-    <button class="btn btn-primary btn-block" id="mSave">ذخیره</button>
-    <button class="btn btn-secondary btn-block" id="mClose">انصراف</button>
-  `);
+  var rows = [];
+  try {
+    var idata = inv.inquiryData;
+    if (typeof idata === 'string' && idata) idata = JSON.parse(idata);
+    if (idata && Array.isArray(idata.rows)) rows = JSON.parse(JSON.stringify(idata.rows));
+  } catch (e) { rows = []; }
+  if (!rows.length) rows = [{ code: '', type: '', qty1: '', qty2: '', price: '', cost: '' }];
+  window._editInvRows = rows;
+
+  function rowHtml(r, i) {
+    var types = PRODUCT_OPTIONS.map(function (t) {
+      return '<option value="' + t + '"' + (r.type === t ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+    return '<div class="card" style="padding:8px;margin:6px 0;background:#f8fafc" data-erow="' + i + '">' +
+      '<div class="muted" style="font-size:11px;margin-bottom:4px">ردیف ' + fa(i + 1) + '</div>' +
+      '<label>کد</label><input data-ef="code" data-ei="' + i + '" value="' + esc(r.code || '') + '" />' +
+      '<label>نوع</label><select data-ef="type" data-ei="' + i + '"><option value="">—</option>' + types + '</select>' +
+      '<label>کارتن</label><input data-ef="qty1" data-ei="' + i + '" value="' + esc(r.qty1 || '') + '" inputmode="decimal" />' +
+      '<label>مبلغ هر متر</label><input data-ef="price" data-ei="' + i + '" value="' + esc(r.price || '') + '" inputmode="numeric" />' +
+      '<label>متراژ</label><input data-ef="qty2" data-ei="' + i + '" value="' + esc(r.qty2 || '') + '" readonly style="background:#eee" />' +
+      '<label>جمع ردیف</label><input data-ef="cost" data-ei="' + i + '" value="' + esc(r.cost || '') + '" readonly style="background:#eee" />' +
+      '</div>';
+  }
+  function sumHtml() {
+    var rs = window._editInvRows || [];
+    var n = 0, m = 0, t = 0;
+    rs.forEach(function (r) {
+      if (!(r.code || r.qty1 || r.price)) return;
+      n++;
+      m += parseFloat(en(String(r.qty2 || '0'))) || 0;
+      t += amount(r.cost);
+    });
+    return 'جمع اقلام: ' + fa(n) + ' ردیف | متراژ: ' + fa(String(Math.round(m * 10000) / 10000)) + ' | مبلغ: ' + fmt(t);
+  }
+  function recalcRow(i) {
+    var r = window._editInvRows[i];
+    if (!r) return;
+    var mapped = productFromCode(r.code);
+    if (mapped) {
+      if (mapped === 'Egmont') {
+        if (r.type !== 'Egmont' && r.type !== 'N Egmont') r.type = '';
+      } else {
+        r.type = mapped;
+      }
+    }
+    var factor = PRODUCT_FACTORS[r.type] || 1.9608;
+    var c = parseFloat(en(String(r.qty1 || '0'))) || 0;
+    if (c > 0 && r.type) {
+      r.qty2 = String(Math.round(c * factor * 10000) / 10000);
+    }
+    var price = amount(r.price);
+    var meters = parseFloat(en(String(r.qty2 || '0'))) || 0;
+    r.cost = price && meters ? String(Math.round(price * meters)) : (r.cost || '0');
+  }
+  function refreshRowsDom() {
+    var host = document.getElementById('mRows');
+    if (!host) return;
+    host.innerHTML = (window._editInvRows || []).map(rowHtml).join('');
+    var sum = document.getElementById('mItemsSum');
+    if (sum) sum.textContent = sumHtml();
+    bindRowEvents();
+  }
+  function bindRowEvents() {
+    document.querySelectorAll('[data-ef]').forEach(function (el) {
+      el.oninput = function () {
+        var i = +el.dataset.ei;
+        var f = el.dataset.ef;
+        if (!window._editInvRows[i]) return;
+        window._editInvRows[i][f] = el.value;
+        if (f === 'code' || f === 'type' || f === 'qty1' || f === 'price') {
+          recalcRow(i);
+          var card = document.querySelector('[data-erow="' + i + '"]');
+          if (card) {
+            var tsel = card.querySelector('[data-ef="type"]');
+            if (tsel && window._editInvRows[i].type) tsel.value = window._editInvRows[i].type;
+            var q2 = card.querySelector('[data-ef="qty2"]');
+            if (q2) q2.value = window._editInvRows[i].qty2 || '';
+            var co = card.querySelector('[data-ef="cost"]');
+            if (co) co.value = window._editInvRows[i].cost || '';
+          }
+          var sum = document.getElementById('mItemsSum');
+          if (sum) sum.textContent = sumHtml();
+        }
+      };
+      el.onkeydown = function (ev) {
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault();
+        var i = +el.dataset.ei;
+        var order = ['code', 'type', 'qty1', 'price'];
+        var f = el.dataset.ef;
+        var ix = order.indexOf(f);
+        if (ix >= 0 && ix < order.length - 1) {
+          var next = document.querySelector('[data-ei="' + i + '"][data-ef="' + order[ix + 1] + '"]');
+          if (next) next.focus();
+        } else {
+          if (i >= window._editInvRows.length - 1) {
+            window._editInvRows.push({ code: '', type: '', qty1: '', qty2: '', price: '', cost: '' });
+            refreshRowsDom();
+          }
+          var n = document.querySelector('[data-ei="' + (i + 1) + '"][data-ef="code"]');
+          if (n) n.focus();
+        }
+      };
+    });
+  }
+
+  var names = customerNames();
+  showModal(
+    '<h3>' + (isNew ? 'حواله جدید' : 'ویرایش حواله') + '</h3>' +
+    '<label>مشتری</label>' +
+    '<input id="mCust" list="mCustList" value="' + esc(inv.customer) + '" placeholder="نام یا انتخاب از لیست" />' +
+    '<datalist id="mCustList">' + names.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+    '<div class="cust-scroll">' + (names.map(function (n) {
+      return '<button type="button" class="cust-chip" data-pick="' + esc(n) + '">' + esc(n) + '</button>';
+    }).join('') || '<span class="muted">هنوز مشتری‌ای نیست</span>') + '</div>' +
+    '<label>شماره حواله</label><input id="mNo" value="' + esc(inv.invoiceNo) + '" />' +
+    '<label>تاریخ شمسی</label><input id="mDate" value="' + esc(inv.date) + '" placeholder="1405/01/01" />' +
+    '<label>ساعت</label><input id="mTime" value="' + esc(inv.time || nj.time) + '" placeholder="14:30:00" />' +
+    '<label>مبلغ کل</label><input id="mTotal" value="' + esc(inv.total) + '" inputmode="numeric" />' +
+    '<label>مبلغ پرداختی</label><input id="mPaid" value="' + esc(inv.paidAmount !== "" && inv.paidAmount != null ? inv.paidAmount : inv.total) + '" inputmode="numeric" />' +
+    '<h3 style="margin-top:12px;font-size:15px">اقلام کالا</h3>' +
+    '<div id="mRows"></div>' +
+    '<div id="mItemsSum" class="stat" style="margin:8px 0;padding:10px;background:#ecfdf5;border-radius:12px;font-weight:700;font-size:13px;color:#065f46;text-align:center"></div>' +
+    '<button type="button" class="btn btn-secondary btn-block" id="mAddRow">+ ردیف</button>' +
+    '<button type="button" class="btn btn-secondary btn-block" id="mSumItems">محاسبه جمع کل از اقلام</button>' +
+    '<button class="btn btn-primary btn-block" id="mSave">ذخیره</button>' +
+    '<button class="btn btn-secondary btn-block" id="mClose">انصراف</button>'
+  );
+  document.getElementById('mRows').innerHTML = rows.map(rowHtml).join('');
+  document.getElementById('mItemsSum').textContent = sumHtml();
+  bindRowEvents();
   document.getElementById('mClose').onclick = hideModal;
-  document.querySelectorAll('[data-pick]').forEach(b => {
-    b.onclick = () => { document.getElementById('mCust').value = b.dataset.pick; };
+  document.querySelectorAll('[data-pick]').forEach(function (b) {
+    b.onclick = function () { document.getElementById('mCust').value = b.dataset.pick; };
   });
-  document.getElementById('mSave').onclick = () => {
-    const customer = document.getElementById('mCust').value.trim();
-    const invoiceNo = en(document.getElementById('mNo').value.trim());
-    const date = en(document.getElementById('mDate').value.trim());
-    const time = en(document.getElementById('mTime').value.trim()) || nowJalali().time;
-    const total = String(amount(document.getElementById('mTotal').value));
-    const paidAmount = String(amount(document.getElementById('mPaid').value));
+  document.getElementById('mAddRow').onclick = function () {
+    window._editInvRows.push({ code: '', type: '', qty1: '', qty2: '', price: '', cost: '' });
+    refreshRowsDom();
+  };
+  document.getElementById('mSumItems').onclick = function () {
+    (window._editInvRows || []).forEach(function (_, i) { recalcRow(i); });
+    refreshRowsDom();
+    var t = 0;
+    (window._editInvRows || []).forEach(function (r) { t += amount(r.cost); });
+    if (t > 0) document.getElementById('mTotal').value = String(t);
+  };
+  document.getElementById('mSave').onclick = function () {
+    var customer = document.getElementById('mCust').value.trim();
+    var invoiceNo = en(document.getElementById('mNo').value.trim());
+    var date = en(document.getElementById('mDate').value.trim());
+    var time = en(document.getElementById('mTime').value.trim()) || nowJalali().time;
+    var total = String(amount(document.getElementById('mTotal').value));
+    var paidAmount = String(amount(document.getElementById('mPaid').value));
     if (!customer || !invoiceNo) return alert('مشتری و شماره حواله لازم است');
-    const now = new Date();
+    (window._editInvRows || []).forEach(function (_, i) { recalcRow(i); });
+    var cleanRows = (window._editInvRows || []).filter(function (r) {
+      return (r.code || r.qty1 || r.price);
+    }).map(function (r) {
+      return {
+        code: en(String(r.code || '')).trim(),
+        type: r.type || '',
+        qty1: en(String(r.qty1 || '')).trim(),
+        qty2: en(String(r.qty2 || '')).trim(),
+        price: String(amount(r.price) || r.price || ''),
+        cost: String(amount(r.cost) || '0')
+      };
+    });
+    var inqData = '';
+    try {
+      var base = {};
+      if (inv.inquiryData) {
+        try {
+          base = typeof inv.inquiryData === 'string' ? JSON.parse(inv.inquiryData) : (inv.inquiryData || {});
+        } catch (e) { base = {}; }
+      }
+      if (!base || typeof base !== 'object') base = {};
+      base.rows = cleanRows;
+      base.tab = base.tab || 'parquet';
+      base.total = total;
+      if (cleanRows.length) inqData = JSON.stringify(base);
+      else if (inv.inquiryData) inqData = typeof inv.inquiryData === 'string' ? inv.inquiryData : JSON.stringify(inv.inquiryData);
+    } catch (e) { inqData = inv.inquiryData || ''; }
+    var now = new Date();
     if (isNew) {
       DB.invoices.push({
-        id: DB.nextId++, customer, invoiceNo, date, time, total, paidAmount,
-        createdAt: now.toISOString(), inquiryData: ''
+        id: DB.nextId++,
+        customer: customer,
+        invoiceNo: invoiceNo,
+        date: date,
+        time: time,
+        total: total,
+        paidAmount: paidAmount,
+        createdAt: now.toISOString(),
+        inquiryData: inqData
       });
     } else {
-      const x = DB.invoices.find(x => x.id === inv.id);
-      if (x) Object.assign(x, { customer, invoiceNo, date, time, total, paidAmount });
+      var x = DB.invoices.find(function (xx) { return xx.id === inv.id; });
+      if (x) {
+        x.customer = customer;
+        x.invoiceNo = invoiceNo;
+        x.date = date;
+        x.time = time;
+        x.total = total;
+        x.paidAmount = paidAmount;
+        x.inquiryData = inqData;
+      }
     }
     save(DB);
     hideModal();
@@ -1948,7 +2328,7 @@ function openInvoiceModal(inv) {
   };
 }
 
-/* ---------- CUSTOMERS ---------- */
+
 function renderCustomers() {
   const y = currentYear();
   const names = customerNames();
