@@ -105,18 +105,36 @@ function load() {
 function defaultData() {
   return { invoices: [], balances: {}, inquiries: [], company: 'SalesMate', nextId: 1 };
 }
+function rotateLocalBackups(prevRaw) {
+  try {
+    if (!prevRaw || prevRaw.length < 20) return;
+    // نگه داشتن حداکثر ۵ بکاپ محلی (جدیدترین = backup، بعد 1..4)
+    var slots = [];
+    try { slots.push(localStorage.getItem('salesmate_db_backup')); } catch (e) {}
+    for (var i = 1; i <= 4; i++) {
+      try { slots.push(localStorage.getItem('salesmate_db_backup_' + i)); } catch (e) { slots.push(null); }
+    }
+    // شیفت به عقب
+    for (var j = 4; j >= 1; j--) {
+      var src = j === 1 ? slots[0] : slots[j - 1];
+      try {
+        if (src) localStorage.setItem('salesmate_db_backup_' + j, src);
+      } catch (e) {}
+    }
+    localStorage.setItem('salesmate_db_backup', prevRaw);
+    localStorage.setItem('salesmate_db_backup_at', new Date().toISOString());
+  } catch (e) {}
+}
 function save(data, opts) {
   opts = opts || {};
   try {
     var prev = localStorage.getItem(KEY);
-    if (prev && prev.length > 20) {
-      localStorage.setItem('salesmate_db_backup', prev);
-      localStorage.setItem('salesmate_db_backup_at', new Date().toISOString());
-    }
+    rotateLocalBackups(prev);
   } catch (e) {}
   localStorage.setItem(KEY, JSON.stringify(data));
   if (opts.skipCloud) return;
-  try { scheduleCloudPush(1500, true); } catch (e) {}
+  // ارسال به ابر فقط دستی — از دکمه «ارسال به ابر» در تنظیمات
+  try { _localDirty = true; } catch (e) {}
 }
 function restoreLocalBackup() {
   try {
@@ -182,23 +200,8 @@ async function isOnlineQuick() {
 
 let _backupClosing = false;
 async function tryBackupOnLeave() {
-  if (_backupClosing) return;
-  if (!backupOnCloseEnabled()) return;
-  if (!sbLoggedIn()) return;
-  _backupClosing = true;
-  try {
-    const online = await isOnlineQuick();
-    if (!online) {
-      // best-effort message (browsers limit dialogs on unload)
-      try { alert('آفلاین هستید؛ پشتیبان ابری انجام نشد.'); } catch(e) {}
-      return;
-    }
-    await pushToSupabase();
-  } catch(e) {
-    try { alert('پشتیبان ابری انجام نشد: ' + (e.message || e)); } catch(err) {}
-  } finally {
-    _backupClosing = false;
-  }
+  // ارسال خودکار هنگام بستن غیرفعال — فقط از دکمه «ارسال به ابر»
+  return;
 }
 
 function sbLoggedIn() {
@@ -349,24 +352,11 @@ function setSyncFlash(mode) {
 }
 
 function scheduleCloudPush(delayMs, force) {
-  if (typeof sbLoggedIn === 'function' && !sbLoggedIn()) return;
-  if (force) _localDirty = true;
-  if (!_cloudSynced && !force) return;
-  if (_cloudBusy) return;
-  if (!force && Date.now() - _lastPullAt < 2000) return;
-  // اگر dirty هستیم، push را عقب نیندازیم
-  if (_pushTimer) clearTimeout(_pushTimer);
-  _pushTimer = setTimeout(function () {
-    _pushTimer = null;
-    if (_cloudBusy || !sbLoggedIn()) return;
-    if (!force && !_cloudSynced) return;
-    if (!force && !_localDirty && Date.now() - _lastPullAt < 2000) return;
-    _cloudSynced = true;
-    pushToSupabase().then(function () {
-      _localDirty = false;
-    }).catch(function (e) { console.warn('cloud push', e); });
-  }, delayMs == null ? 500 : delayMs);
+  // غیرفعال: ارسال خودکار به ابر انجام نمی‌شود — فقط دکمه دستی «ارسال به ابر»
+  try { if (force) _localDirty = true; } catch (e) {}
+  return;
 }
+
 
 function toIsoTimestamp(v) {
   if (v == null || v === '') return new Date().toISOString();
@@ -483,7 +473,7 @@ async function pushToSupabase() {
     // ---- invoices merge ----
     var cloudInvs = [];
     try {
-      cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+      cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data,image_path') || [];
     } catch (e) { cloudInvs = []; }
     var cloudInvMap = {};
     cloudInvs.forEach(function (r) {
@@ -611,12 +601,10 @@ async function autoPullFromCloud(reason) {
   if (!sbLoggedIn()) return false;
   if (navigator.onLine === false) return false;
   if (_cloudBusy) return false;
-  if (_localDirty) {
-    try { scheduleCloudPush(300, true); } catch (e) {}
-    // بعد از ارسال، ادغام از ابر
-  }
+  // اگر تغییر محلی ارسال‌نشده هست، دریافت خودکار نکن تا داده لوکال خراب نشود
+  if (_localDirty) return false;
   try {
-    await pullFromSupabase({ force: true });
+    await pullFromSupabase({ force: true, pullOnly: true });
     _cloudSynced = true;
     return true;
   } catch (e) {
@@ -628,7 +616,8 @@ async function pullFromSupabase(opts) {
   opts = opts || {};
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
-  if (_localDirty && !opts.force) {
+  // ارسال خودکار ممنوع — فقط اگر صریحاً خواسته شود (دکمه دستی قدیمی)
+  if (_localDirty && !opts.force && !opts.pullOnly && opts.allowPush) {
     try { await pushToSupabase(); } catch (e) {
       throw new Error('ابتدا ارسال محلی: ' + (e.message || e));
     }
@@ -643,7 +632,7 @@ async function pullFromSupabase(opts) {
     if (!DB.inquiries) DB.inquiries = [];
     if (!DB.storeSales) DB.storeSales = [];
 
-    var cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
+    var cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data,image_path') || [];
     var cloudBals = [];
     try { cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
     var cloudInqs = [];
@@ -3124,8 +3113,9 @@ function renderSettings() {
         پشتیبان خودکار هنگام بستن صفحه
       </label>
       <button type="button" class="btn btn-secondary btn-block" id="btnRestoreLocal">بازیابی بک‌آپ محلی</button>
-      <button type="button" id="btnSbPull">⬇ دریافت از ابر</button>
-      <button class="btn btn-secondary btn-block" id="btnSbPush">⬆ ارسال به ابر</button>
+      <button type="button" class="btn btn-primary btn-block" id="btnSbPull" style="margin-top:10px">⬇ دریافت از ابر</button>
+      <button type="button" class="btn btn-secondary btn-block" id="btnSbPush">⬆ ارسال به ابر</button>
+      <p class="muted" style="font-size:11px;margin-top:6px;line-height:1.6">دریافت از ابر خودکار است. ارسال به ابر فقط با همین دکمه انجام می‌شود.</p>
     </div>
     <div class="card">
       <h2>پشتیبان فایل</h2>
@@ -3535,7 +3525,6 @@ function bindStorePage() {
     }
     save(DB);
     storeForm = { tab: storeForm.tab, buyer: '', invoiceNo: '', date: nj.date, rows: [storeEmptyRow()], editingId: null };
-    try { if (sbLoggedIn()) pushToSupabase(); } catch (e) {}
     go('store');
     alert('ثبت شد');
   };
@@ -3561,7 +3550,6 @@ function bindStorePage() {
       const id = +b.dataset.stDel;
       DB.storeSales = (DB.storeSales || []).filter(x => x.id !== id);
       save(DB);
-      try { if (sbLoggedIn()) pushToSupabase(); } catch (e) {}
       go('store');
     };
   });
@@ -3916,10 +3904,7 @@ function bindPage(page) {
       if (!confirm('داده ابر با داده گوشی ادغام شود؟ (اطلاعات محلی پاک نمی‌شود)')) return;
       try {
         sbPull.textContent = 'در حال دریافت...';
-        if (_localDirty) {
-          try { await pushToSupabase(); _localDirty = false; } catch (pe) { alert('اول باید تغییرات محلی ارسال شود: ' + pe.message); return; }
-        }
-        await pullFromSupabase();
+        await pullFromSupabase({ force: true, pullOnly: true });
         try { await pullInventoryFromCloud(); } catch (ie) {}
         _cloudSynced = true;
         const nStore = (DB.storeSales || []).length;
@@ -3928,7 +3913,7 @@ function bindPage(page) {
       } catch (e) {
         alert('خطا: ' + e.message);
       } finally {
-        sbPull.textContent = '⬇ دریافت داده من از ابر';
+        sbPull.textContent = '⬇ دریافت از ابر';
       }
     };
     if (sbPush) sbPush.onclick = async () => {
@@ -3940,7 +3925,7 @@ function bindPage(page) {
       } catch (e) {
         alert('خطا: ' + e.message);
       } finally {
-        sbPush.textContent = '⬆ ارسال داده من به ابر';
+        sbPush.textContent = '⬆ ارسال به ابر';
       }
     };
     document.getElementById('btnExport').onclick = () => {
@@ -4036,7 +4021,7 @@ document.addEventListener('visibilitychange', function () {
     try { tryBackupOnLeave(); } catch(e) {}
   } else if (document.visibilityState === 'visible') {
     // برگشت به اپ → فقط اگر حداقل ۴۵ ثانیه از آخرین pull گذشته
-    if (sbLoggedIn() && navigator.onLine !== false && !_cloudBusy && (Date.now() - _lastPullAt > 45000)) {
+    if (sbLoggedIn() && navigator.onLine !== false && !_cloudBusy && (Date.now() - _lastPullAt > 300000)) {
       autoPullFromCloud('visible').then(function (ok) {
         if (ok) {
           try {
@@ -4157,6 +4142,8 @@ async function refreshAllFromCloud(showAlert) {
       if (typeof _localDirty !== 'undefined' && _localDirty) return;
       if (typeof _cloudBusy !== 'undefined' && _cloudBusy) return;
       if (document.hidden) return;
+      // حداقل ۴ دقیقه از آخرین pull
+      if (typeof _lastPullAt === 'number' && (Date.now() - _lastPullAt) < 240000) return;
       var invMeta = (typeof loadInventoryMeta === 'function') ? loadInventoryMeta() : { items: [], uploadedAt: '' };
       var before = JSON.stringify({
         inv: (DB.invoices || []).length,
@@ -4165,7 +4152,7 @@ async function refreshAllFromCloud(showAlert) {
         stock: (invMeta.items || []).length,
         up: invMeta.uploadedAt || ''
       });
-      pullFromSupabase().then(function () {
+      pullFromSupabase({ force: true, pullOnly: true }).then(function () {
         try {
           var invMeta2 = (typeof loadInventoryMeta === 'function') ? loadInventoryMeta() : { items: [], uploadedAt: '' };
           var after = JSON.stringify({
@@ -4182,5 +4169,9 @@ async function refreshAllFromCloud(showAlert) {
         } catch (e) {}
       }).catch(function () {});
     } catch (e) {}
-  }, 20000);
+  }, 300000); // هر ۵ دقیقه — کاهش مصرف اینترنت
+})();
+
+(function periodicCloudBackupInit() {
+  // ارسال خودکار هر ۳ ساعت غیرفعال — فقط ارسال دستی
 })();
