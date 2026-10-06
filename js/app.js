@@ -36,6 +36,7 @@ function buildChartSvg(totals) {
 
 /* SalesMate Mobile Web — localStorage */
 const KEY = 'salesmate_mw_v1';
+const DIRTY_KEY = 'salesmate_dirty_v1';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -134,7 +135,8 @@ function save(data, opts) {
   localStorage.setItem(KEY, JSON.stringify(data));
   if (opts.skipCloud) return;
   // ارسال به ابر فقط دستی — از دکمه «ارسال به ابر» در تنظیمات
-  try { _localDirty = true; } catch (e) {}
+  // علامت به‌صورت پایدار ذخیره می‌شود تا بعد از بستن/باز شدن هم pull روی داده ارسال‌نشده نرود
+  markLocalDirty();
 }
 function restoreLocalBackup() {
   try {
@@ -147,6 +149,7 @@ function restoreLocalBackup() {
     if (!Array.isArray(DB.invoices)) DB.invoices = [];
     if (!Array.isArray(DB.inquiries)) DB.inquiries = [];
     if (!Array.isArray(DB.storeSales)) DB.storeSales = [];
+    markLocalDirty(); // بکاپ بازیابی‌شده با ابر فرق دارد — باید ارسال شود
     return {
       inv: (DB.invoices || []).length,
       inq: (DB.inquiries || []).length,
@@ -340,8 +343,16 @@ let _pushTimer = null;
 let _cloudSynced = false;
 let _cloudBusy = false;
 let _lastPullAt = 0;
-let _localDirty = false;
+let _localDirty = (function () { try { return localStorage.getItem(DIRTY_KEY) === '1'; } catch (e) { return false; } })();
 let _pushQueued = false;
+function markLocalDirty() {
+  try { _localDirty = true; } catch (e) {}
+  try { localStorage.setItem(DIRTY_KEY, '1'); } catch (e) {}
+}
+function clearLocalDirty() {
+  try { _localDirty = false; } catch (e) {}
+  try { localStorage.removeItem(DIRTY_KEY); } catch (e) {}
+}
 function setSyncFlash(mode) {
   var el = document.getElementById('syncFlash');
   if (!el) return;
@@ -353,7 +364,7 @@ function setSyncFlash(mode) {
 
 function scheduleCloudPush(delayMs, force) {
   // غیرفعال: ارسال خودکار به ابر انجام نمی‌شود — فقط دکمه دستی «ارسال به ابر»
-  try { if (force) _localDirty = true; } catch (e) {}
+  if (force) markLocalDirty();
   return;
 }
 
@@ -439,6 +450,7 @@ async function pushToSupabase() {
   if (_cloudBusy) { _pushQueued = true; return; }
   _cloudBusy = true;
   setSyncFlash('up');
+  var pushFailed = false; // هر خطای نوشتن → dirty می‌ماند تا دفعه بعد دوباره تلاش شود
   try {
     try { DB = load(); } catch (e) {}
     const uid = sbUser().user_id;
@@ -448,7 +460,7 @@ async function pushToSupabase() {
         var bak = localStorage.getItem('salesmate_db_backup');
         if (bak) {
           var bd = JSON.parse(bak);
-          if ((bd.invoices || []).length > 0) {
+          if ((bd.invoices || []).length > 0 && !(DB.deletedInvKeys || []).length) {
             console.warn('push aborted: empty DB vs non-empty backup');
             return;
           }
@@ -471,15 +483,32 @@ async function pushToSupabase() {
     } catch (e) {}
 
     // ---- invoices merge ----
-    var cloudInvs = [];
-    try {
-      cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data,image_path') || [];
-    } catch (e) { cloudInvs = []; }
+    // خطا در دریافت فهرست ابر → کل push قطع شود (در غیر این صورت ردیف تکراری ساخته می‌شود)
+    var cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data,image_path') || [];
     var cloudInvMap = {};
     cloudInvs.forEach(function (r) {
       var k = syncInvKey({ invoiceNo: r.invoice_no, date: r.date, customer: r.customer, total: r.total });
       if (k) cloudInvMap[k] = r;
     });
+
+    // ---- حذف حواله‌های حذف‌شده محلی از ابر (tombstone) تا برنگردند ----
+    var localInvKeys = {};
+    (DB.invoices || []).forEach(function (inv) { var k = syncInvKey(inv); if (k) localInvKeys[k] = true; });
+    var invTombs = (DB.deletedInvKeys || []).filter(function (k) { return k && !localInvKeys[k]; });
+    var invTombsLeft = [];
+    for (var ti = 0; ti < invTombs.length; ti++) {
+      var delFailed = false;
+      for (var ci = 0; ci < cloudInvs.length; ci++) {
+        var rk = syncInvKey({ invoiceNo: cloudInvs[ci].invoice_no, date: cloudInvs[ci].date, customer: cloudInvs[ci].customer, total: cloudInvs[ci].total });
+        if (rk !== invTombs[ti] || cloudInvs[ci].id == null) continue;
+        try {
+          await sbFetch('DELETE', '/rest/v1/invoices?id=eq.' + cloudInvs[ci].id + '&user_id=eq.' + encodeURIComponent(uid));
+        } catch (e) { delFailed = true; }
+      }
+      if (delFailed) { invTombsLeft.push(invTombs[ti]); pushFailed = true; }
+    }
+    DB.deletedInvKeys = invTombsLeft; // فقط حذف‌های ناموفق نگه داشته می‌شوند
+
     var toPost = [], toPatch = [];
     (DB.invoices || []).forEach(function (inv) {
       var row = {
@@ -505,14 +534,12 @@ async function pushToSupabase() {
     for (var p = 0; p < toPatch.length; p++) {
       try {
         await sbFetch('PATCH', '/rest/v1/invoices?id=eq.' + toPatch[p].id + '&user_id=eq.' + encodeURIComponent(uid), toPatch[p].row);
-      } catch (e) {}
+      } catch (e) { pushFailed = true; }
     }
 
     // ---- balances ----
-    var cloudBals = [];
-    try {
-      cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
-    } catch (e) {}
+    // خطا در دریافت فهرست ابر → push قطع شود تا ردیف تکراری ساخته نشود
+    var cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
     var balMap = {};
     cloudBals.forEach(function (b) { if (b.customer) balMap[b.customer] = b; });
     var bals = DB.balances || {};
@@ -527,15 +554,12 @@ async function pushToSupabase() {
           await sbFetch('POST', '/rest/v1/customer_balances', body);
         }
       } catch (e) {
-        try { await sbFetch('POST', '/rest/v1/customer_balances', body); } catch (e2) {}
+        try { await sbFetch('POST', '/rest/v1/customer_balances', body); } catch (e2) { pushFailed = true; }
       }
     }
 
     // ---- inquiries ----
-    var cloudInqs = [];
-    try {
-      cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
-    } catch (e) {}
+    var cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
     var inqMap = {};
     cloudInqs.forEach(function (r) {
       var pl = r.payload;
@@ -544,6 +568,26 @@ async function pushToSupabase() {
       var k = syncInqKey(pl);
       if (k) inqMap[k] = r;
     });
+
+    // ---- حذف استعلام‌های حذف‌شده محلی از ابر (tombstone) ----
+    var localInqKeys = {};
+    (DB.inquiries || []).forEach(function (it) { var k = it && syncInqKey(it); if (k) localInqKeys[k] = true; });
+    var inqTombs = (DB.deletedInqKeys || []).filter(function (k) { return k && !localInqKeys[k]; });
+    var inqTombsLeft = [];
+    for (var it2 = 0; it2 < inqTombs.length; it2++) {
+      var delFailed2 = false;
+      for (var ci2 = 0; ci2 < cloudInqs.length; ci2++) {
+        var pl2 = cloudInqs[ci2].payload;
+        if (typeof pl2 === 'string') { try { pl2 = JSON.parse(pl2); } catch (e) { pl2 = null; } }
+        if (!pl2 || typeof pl2 !== 'object') continue;
+        if (syncInqKey(pl2) !== inqTombs[it2] || cloudInqs[ci2].id == null) continue;
+        try {
+          await sbFetch('DELETE', '/rest/v1/inquiries?id=eq.' + cloudInqs[ci2].id + '&user_id=eq.' + encodeURIComponent(uid));
+        } catch (e) { delFailed2 = true; }
+      }
+      if (delFailed2) { inqTombsLeft.push(inqTombs[it2]); pushFailed = true; }
+    }
+    DB.deletedInqKeys = inqTombsLeft;
     for (var qi = 0; qi < (DB.inquiries || []).length; qi++) {
       var item = DB.inquiries[qi];
       if (!item || typeof item !== 'object') continue;
@@ -555,14 +599,11 @@ async function pushToSupabase() {
         } else {
           await sbFetch('POST', '/rest/v1/inquiries', ibody);
         }
-      } catch (e) {}
+      } catch (e) { pushFailed = true; }
     }
 
     // ---- store ----
-    var cloudStore = [];
-    try {
-      cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
-    } catch (e) {}
+    var cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || [];
     var stMap = {};
     cloudStore.forEach(function (r) {
       var k = syncStoreKey({ invoiceNo: r.invoice_no, date: r.date, customer: r.customer, total: r.total });
@@ -577,14 +618,15 @@ async function pushToSupabase() {
       };
       var exs = stMap[syncStoreKey(s)];
       if (exs && exs.id != null) {
-        sbFetch('PATCH', '/rest/v1/store_sales?id=eq.' + exs.id + '&user_id=eq.' + encodeURIComponent(uid), row).catch(function () {});
+        sbFetch('PATCH', '/rest/v1/store_sales?id=eq.' + exs.id + '&user_id=eq.' + encodeURIComponent(uid), row).catch(function () { pushFailed = true; });
       } else stPost.push(row);
     });
     for (var si = 0; si < stPost.length; si += 80) {
-      try { await sbFetch('POST', '/rest/v1/store_sales', stPost.slice(si, si + 80)); } catch (e) {}
+      try { await sbFetch('POST', '/rest/v1/store_sales', stPost.slice(si, si + 80)); } catch (e) { pushFailed = true; }
     }
 
-    _localDirty = false;
+    try { save(DB, { skipCloud: true }); } catch (e) {} // ذخیره پاک‌سازی tombstone ها و نرمال‌سازی تاریخ‌ها
+    if (pushFailed) markLocalDirty(); else clearLocalDirty();
     _lastPullAt = Date.now();
   } finally {
     _cloudBusy = false;
@@ -616,11 +658,12 @@ async function pullFromSupabase(opts) {
   opts = opts || {};
   if (!sbLoggedIn()) throw new Error('ابتدا وارد شوید.');
   if (_cloudBusy) throw new Error('همگام‌سازی قبلی هنوز تمام نشده');
-  // ارسال خودکار ممنوع — فقط اگر صریحاً خواسته شود (دکمه دستی قدیمی)
-  if (_localDirty && !opts.force && !opts.pullOnly && opts.allowPush) {
+  // هرگز روی تغییر ارسال‌نشده محلی pull نکن: اول push، و اگر کامل نشد دریافت انجام نشود
+  if (_localDirty) {
     try { await pushToSupabase(); } catch (e) {
-      throw new Error('ابتدا ارسال محلی: ' + (e.message || e));
+      throw new Error('ابتدا ارسال تغییرات محلی: ' + (e.message || e));
     }
+    if (_localDirty) throw new Error('برخی تغییرات محلی ارسال نشد — دریافت از ابر متوقف شد تا داده از دست نرود');
   }
   _cloudBusy = true;
   setSyncFlash('down');
@@ -633,18 +676,21 @@ async function pullFromSupabase(opts) {
     if (!DB.storeSales) DB.storeSales = [];
 
     var cloudInvs = await sbFetch('GET', '/rest/v1/invoices?user_id=eq.' + encodeURIComponent(uid) + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data,image_path') || [];
-    var cloudBals = [];
-    try { cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
-    var cloudInqs = [];
-    try { cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
-    var cloudStore = [];
-    try { cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) {}
+    // null = خطا — در حالت خطا هرگز داده محلی را جایگزین نکن (جلوگیری از پاک‌شدن با خرابی شبکه)
+    var cloudBals = null;
+    try { cloudBals = await sbFetch('GET', '/rest/v1/customer_balances?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) { cloudBals = null; }
+    var cloudInqs = null;
+    try { cloudInqs = await sbFetch('GET', '/rest/v1/inquiries?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) { cloudInqs = null; }
+    var cloudStore = null;
+    try { cloudStore = await sbFetch('GET', '/rest/v1/store_sales?user_id=eq.' + encodeURIComponent(uid) + '&select=*') || []; } catch (e) { cloudStore = null; }
 
     var invMap = {};
     DB.invoices.forEach(function (inv) {
       var k = syncInvKey(inv);
       if (k) invMap[k] = inv;
     });
+    var delInvKeys = {};
+    (DB.deletedInvKeys || []).forEach(function (k) { if (k) delInvKeys[k] = true; });
     cloudInvs.forEach(function (r) {
       var loc = {
         id: 0,
@@ -660,6 +706,7 @@ async function pullFromSupabase(opts) {
       };
       var k = syncInvKey(loc);
       if (!k) return;
+      if (delInvKeys[k]) return; // حذف‌شده محلی — برنگردد
       if (!invMap[k]) {
         DB.invoices.push(loc);
         invMap[k] = loc;
@@ -675,34 +722,48 @@ async function pullFromSupabase(opts) {
       }
     });
 
-    // تعدیل‌ها: ابر مرجع است (کل دیکشنری از ابر)
+    // تعدیل‌ها: ابر مرجع است — اما فقط وقتی واقعاً چیزی از ابر آمده باشد
     var newBals = {};
-    cloudBals.forEach(function (b) {
+    (cloudBals || []).forEach(function (b) {
       if (b.customer) newBals[b.customer] = String(b.adjustment || '0');
     });
-    // اگر ابر تعدیل دارد، جایگزین؛ اگر خالی بود لوکال را نگه نداریم که اختلاف نماند
-    DB.balances = newBals;
+    if (cloudBals && (cloudBals.length || !Object.keys(DB.balances || {}).length)) {
+      DB.balances = newBals;
+    } else if (cloudBals) {
+      // ابر خالی ولی محلی داده دارد (هنوز push نشده) — پاک نکن و برای ارسال علامت بزن
+      markLocalDirty();
+    }
 
-    // استعلام: ابر مرجع است — حذف‌شده‌ها از دستگاه هم می‌روند
+    // استعلام: ابر مرجع است — اما خطا یا ابر خالی هرگز باعث پاک‌شدن داده محلی نشود
+    var delInqKeys = {};
+    (DB.deletedInqKeys || []).forEach(function (k) { if (k) delInqKeys[k] = true; });
     var newInqs = [];
     var seenInq = {};
-    cloudInqs.forEach(function (r) {
+    (cloudInqs || []).forEach(function (r) {
       var pl = r.payload;
       if (typeof pl === 'string') { try { pl = JSON.parse(pl); } catch (e) { return; } }
       if (!pl || typeof pl !== 'object') return;
       var k = syncInqKey(pl);
       if (k && seenInq[k]) return;
-      if (k) seenInq[k] = true;
+      if (k) {
+        seenInq[k] = true;
+        if (delInqKeys[k]) return; // حذف‌شده محلی — برنگردد
+      }
       newInqs.push(pl);
     });
-    DB.inquiries = newInqs;
+    if (cloudInqs && (cloudInqs.length || !(DB.inquiries || []).length)) {
+      DB.inquiries = newInqs;
+    } else if (cloudInqs) {
+      // ابر خالی ولی محلی داده دارد — نگه دار و برای ارسال علامت بزن
+      markLocalDirty();
+    }
 
     var stMap = {};
     DB.storeSales.forEach(function (s) {
       var k = syncStoreKey(s);
       if (k) stMap[k] = s;
     });
-    cloudStore.forEach(function (r) {
+    (cloudStore || []).forEach(function (r) {
       var loc = {
         customer: r.customer || '', invoiceNo: r.invoice_no || '', date: r.date || '', time: r.time || '',
         total: String(r.total || '0'), tab: r.tab || 'parquet', itemsJson: r.items_json || '[]',
@@ -1294,14 +1355,11 @@ function saveContacts(items) {
     localStorage.setItem(CONTACTS_KEY, JSON.stringify({ items: items || [], updatedAt: new Date().toISOString() }));
   } catch (e) {}
 }
-async function pushContactsToCloud() {
-  if (!sbSessionValid()) throw new Error('وارد حساب شوید');
+async function pushContactsToCloud(opts) {
+  if (!sbLoggedIn()) throw new Error('وارد حساب شوید');
+  // allowDelete فقط برای دکمه دستی — ارسال خودکار بعد از ویرایش فقط ردیف جدید اضافه می‌کند
+  var allowDelete = !!(opts && opts.allowDelete);
   var items = loadContacts();
-  try {
-    await sbFetch('DELETE', '/rest/v1/customer_contacts?id=gt.0');
-  } catch (e) {
-    try { await sbFetch('DELETE', '/rest/v1/customer_contacts?updated_at=not.is.null'); } catch (e2) {}
-  }
   var rows = items.map(function (it) {
     return {
       first_name: it.first_name || '',
@@ -1314,14 +1372,33 @@ async function pushContactsToCloud() {
       updated_at: new Date().toISOString()
     };
   });
-  for (var i = 0; i < rows.length; i += 40) {
-    var chunk = rows.slice(i, i + 40);
+  var keyOf = function (r) {
+    return [r.first_name || '', r.last_name || '', r.company || '', r.phone || '', r.mobile || '', r.city || '', r.address || ''].join('\u0001');
+  };
+  // اول وضعیت ابر را بخوان — هرگز قبل از اطلاع از ابر، چیزی را حذف نکن
+  var cloud = await sbFetch('GET', '/rest/v1/customer_contacts?select=id,first_name,last_name,company,phone,mobile,city,address') || [];
+  var localKeySet = {};
+  rows.forEach(function (r) { localKeySet[keyOf(r)] = true; });
+  var cloudKeySet = {};
+  cloud.forEach(function (r) { cloudKeySet[keyOf(r)] = true; });
+  var toAdd = rows.filter(function (r) { return !cloudKeySet[keyOf(r)]; });
+  var toDeleteIds = [];
+  if (allowDelete) {
+    cloud.forEach(function (r) { if (r.id != null && !localKeySet[keyOf(r)]) toDeleteIds.push(r.id); });
+  }
+  // ۱) اول افزودن — اگر شکست بخورد هیچ حذفی انجام نشده و داده‌ای از دست نمی‌رود
+  for (var i = 0; i < toAdd.length; i += 40) {
+    var chunk = toAdd.slice(i, i + 40);
     if (chunk.length) await sbFetch('POST', '/rest/v1/customer_contacts', chunk);
+  }
+  // ۲) بعد حذف فقط ردیف‌هایی که محلی نیستند — خطای حذف فقط ردیف اضافه باقی می‌گذارد
+  for (var d = 0; d < toDeleteIds.length; d++) {
+    try { await sbFetch('DELETE', '/rest/v1/customer_contacts?id=eq.' + toDeleteIds[d]); } catch (e) {}
   }
   return rows.length;
 }
 async function pullContactsFromCloud() {
-  if (!sbSessionValid()) throw new Error('وارد حساب شوید');
+  if (!sbLoggedIn()) throw new Error('وارد حساب شوید');
   var data = await sbFetch('GET', '/rest/v1/customer_contacts?select=*&order=id.asc') || [];
   var items = (data || []).map(function (r) {
     return {
@@ -1396,7 +1473,7 @@ function bindContactsPage() {
   };
   var push = document.getElementById('ctPush');
   if (push) push.onclick = function () {
-    pushContactsToCloud().then(function (n) { alert('ارسال شد: ' + fa(n)); }).catch(function (e) { alert(String(e.message || e)); });
+    pushContactsToCloud({ allowDelete: true }).then(function (n) { alert('ارسال شد: ' + fa(n)); }).catch(function (e) { alert(String(e.message || e)); });
   };
   var pull = document.getElementById('ctPull');
   if (pull) pull.onclick = function () {
@@ -3153,6 +3230,14 @@ function showSavedInquiries() {
       var idx = +b.dataset.delinq;
       var removed = (DB.inquiries || [])[idx];
       DB.inquiries.splice(idx, 1);
+      if (removed) {
+        // علامت حذف تا در pull از ابر هم برنگردد و push بعداً از ابر پاکش کند
+        var iq = syncInqKey(removed);
+        if (iq) {
+          DB.deletedInqKeys = DB.deletedInqKeys || [];
+          if (DB.deletedInqKeys.indexOf(iq) < 0) DB.deletedInqKeys.push(iq);
+        }
+      }
       save(DB);
       if (removed) {
         deleteInquiryFromCloud(removed).then(function () {
@@ -3244,7 +3329,7 @@ function renderSettings() {
 
 /* ---------- helpers ---------- */
 function esc(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function showModal(html) {
   const m = document.getElementById('modal');
@@ -3721,7 +3806,16 @@ function bindPage(page) {
     document.querySelectorAll('[data-del]').forEach(b => {
       b.onclick = () => {
         if (!confirm('حذف شود؟')) return;
+        var delTarget = DB.invoices.find(i => i.id === +b.dataset.del);
         DB.invoices = DB.invoices.filter(i => i.id !== +b.dataset.del);
+        if (delTarget) {
+          // علامت حذف تا در pull از ابر برنگردد و push بعداً از ابر هم حذفش کند
+          var dk = syncInvKey(delTarget);
+          if (dk) {
+            DB.deletedInvKeys = DB.deletedInvKeys || [];
+            if (DB.deletedInvKeys.indexOf(dk) < 0) DB.deletedInvKeys.push(dk);
+          }
+        }
         save(DB);
         go('invoices');
       };
@@ -4036,7 +4130,8 @@ function bindPage(page) {
       try {
         sbPush.textContent = 'در حال ارسال...';
         await pushToSupabase();
-        alert('داده حساب شما به ابر ارسال شد');
+        if (_localDirty) alert('برخی ردیف‌ها ارسال نشد — داده محلی محفوظ است؛ دوباره تلاش کنید.');
+        else alert('داده حساب شما به ابر ارسال شد');
       } catch (e) {
         alert('خطا: ' + e.message);
       } finally {
