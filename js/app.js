@@ -664,17 +664,24 @@ async function pullFromSupabase(opts) {
         DB.invoices.push(loc);
         invMap[k] = loc;
       } else {
+        // دریافت از ابر: مبلغ/پرداختی/اقلام ابر جایگزین شود تا بدهکار-طلبکار یکسان بماند
         var cur = invMap[k];
-        if (!cur.inquiryData && loc.inquiryData) cur.inquiryData = loc.inquiryData;
-        if (!cur.paidAmount && loc.paidAmount) cur.paidAmount = loc.paidAmount;
+        if (loc.total != null && String(loc.total) !== '') cur.total = String(loc.total);
+        cur.paidAmount = (loc.paidAmount != null) ? String(loc.paidAmount) : '';
+        if (loc.inquiryData) cur.inquiryData = loc.inquiryData;
+        if (loc.time) cur.time = loc.time;
+        if (loc.customer) cur.customer = loc.customer;
+        if (loc.imagePath) cur.imagePath = loc.imagePath;
       }
     });
 
+    // تعدیل‌ها: ابر مرجع است (کل دیکشنری از ابر)
+    var newBals = {};
     cloudBals.forEach(function (b) {
-      if (b.customer && DB.balances[b.customer] == null) {
-        DB.balances[b.customer] = String(b.adjustment || '0');
-      }
+      if (b.customer) newBals[b.customer] = String(b.adjustment || '0');
     });
+    // اگر ابر تعدیل دارد، جایگزین؛ اگر خالی بود لوکال را نگه نداریم که اختلاف نماند
+    DB.balances = newBals;
 
     // استعلام: ابر مرجع است — حذف‌شده‌ها از دستگاه هم می‌روند
     var newInqs = [];
@@ -1343,10 +1350,10 @@ function renderContacts() {
   html += '<p class="muted" style="font-size:12px">لیست مشترک نمایندگان — همه کاربران یکسان</p>';
   html += '<input id="ctSearch" placeholder="جستجو نام، موسسه، شهر، موبایل…" value="' + esc(window._contactsQ || '') + '" />';
   html += '<div class="actions mt" style="flex-wrap:wrap;gap:6px">';
-  html += '<button class="btn btn-primary btn-sm" id="ctAdd">+ جدید</button>';
-  html += '<button class="btn btn-secondary btn-sm" id="ctSeed">بارگذاری لیست</button>';
-  html += '<button class="btn btn-secondary btn-sm" id="ctPush">ارسال ابر</button>';
-  html += '<button class="btn btn-secondary btn-sm" id="ctPull">دریافت ابر</button>';
+  html += '<button type="button" class="btn btn-primary btn-sm" id="ctAdd">+ جدید</button>';
+  html += '<button type="button" class="btn btn-secondary btn-sm" id="ctSeed">بارگذاری لیست</button>';
+  html += '<button type="button" class="btn btn-secondary btn-sm" id="ctPush">ارسال ابر</button>';
+  html += '<button type="button" class="btn btn-secondary btn-sm" id="ctPull">دریافت ابر</button>';
   html += '</div>';
   html += '<div class="muted mt">نمایش ' + fa(items.length) + ' مورد</div></div>';
   if (!items.length) html += '<div class="empty">موردی نیست — بارگذاری لیست را بزنید</div>';
@@ -1360,8 +1367,8 @@ function renderContacts() {
     if (it.phone) ph.push('تلفن: ' + fa(it.phone));
     if (ph.length) html += '<div style="font-size:13px;font-weight:600;margin-top:4px">' + ph.join(' | ') + '</div>';
     if (it.address) html += '<div class="muted" style="font-size:12px;margin-top:4px">' + esc(it.address) + '</div>';
-    html += '<div class="actions mt"><button class="btn btn-secondary btn-sm" data-ct-edit="' + idx + '">ویرایش</button>';
-    html += '<button class="btn btn-danger btn-sm" data-ct-del="' + idx + '">حذف</button></div></div>';
+    html += '<div class="actions mt"><button type="button" class="btn btn-secondary btn-sm" data-ct-edit="' + idx + '">ویرایش</button>';
+    html += '<button type="button" class="btn btn-danger btn-sm" data-ct-del="' + idx + '">حذف</button></div></div>';
   });
   return html;
 }
@@ -1881,36 +1888,118 @@ function renderHome() {
   const nj = nowJalali();
   const y = currentYear();
   const today = nj.date;
-  const cm = parseInt(en(today).split('/')[1], 10) || 1;
-  const monthPrefix = y + '/' + String(cm).padStart(2, '0') + '/';
-  const yearInvs = DB.invoices.filter(i => (i.date || '').startsWith(y));
-  const yearTotal = yearInvs.reduce((s, i) => s + amount(i.total), 0);
-  const dayInvs = DB.invoices.filter(i => i.date === today);
-  const dayTotal = dayInvs.reduce((s, i) => s + amount(i.total), 0);
-  const dayCount = dayInvs.length;
-  const monthInvs = DB.invoices.filter(i => (i.date || '').startsWith(monthPrefix.slice(0, 8)));
-  const monthTotal = monthInvs.reduce((s, i) => s + amount(i.total), 0);
-  const monthCount = monthInvs.length;
-  const avgMonth = monthCount ? Math.round(monthTotal / monthCount) : 0;
+  const partsToday = en(String(today || '')).split('/');
+  const cy = parseInt(partsToday[0], 10) || parseInt(y, 10);
+  const cm = parseInt(partsToday[1], 10) || 1;
+  const monthPrefix = cy + '/' + String(cm).padStart(2, '0');
+  const prevMonthPrefix = cm <= 1
+    ? ((cy - 1) + '/12')
+    : (cy + '/' + String(cm - 1).padStart(2, '0'));
+  const yearPrefix = String(cy);
 
-  const curWeek = storeWeekKey(today);
-  let storeWeekSum = 0, storeWeekM = 0, storeMonthSum = 0, storeMonthM = 0;
-  (DB.storeSales || []).forEach(s => {
-    const tot = amount(s.total);
-    const meters = storeItemsMeterage(storeParseItems(s));
-    const parts = en(String(s.date || '')).split('/');
-    const sy = parseInt(parts[0], 10), sm = parseInt(parts[1], 10);
-    if (sy === parseInt(y, 10) && sm === cm) {
-      storeMonthSum += tot; storeMonthM += meters;
+  function weekKey(dateS) {
+    return storeWeekKey(dateS);
+  }
+  function prevWeekKey(wk) {
+    var yy = wk[0], w = wk[1];
+    if (!yy) return [0, 0];
+    if (w > 0) return [yy, w - 1];
+    return [yy - 1, 51];
+  }
+  function invMeters(inquiryData) {
+    var m = 0;
+    try {
+      var data = inquiryData;
+      if (typeof data === 'string') data = data ? JSON.parse(data) : {};
+      if (!data || !data.rows) return 0;
+      (data.rows || []).forEach(function (r) {
+        m += parseFloat(en(String(r.qty2 || '0')).replace(/,/g, '')) || 0;
+      });
+    } catch (e) {}
+    return m;
+  }
+  function fmtMeter(m) {
+    if (!m) return fa('0');
+    return fa(String(Math.round(m * 10000) / 10000));
+  }
+  function cmpText(cur, prev, label) {
+    cur = Number(cur) || 0;
+    prev = Number(prev) || 0;
+    if (prev <= 0) {
+      if (cur > 0) return 'نسبت به ' + label + ': جدید ▲';
+      return 'نسبت به ' + label + ': —';
     }
-    const wk = storeWeekKey(s.date);
+    var pct = (cur - prev) / prev * 100;
+    var arrow = pct >= 0 ? '▲' : '▼';
+    var sign = pct >= 0 ? '+' : '−';
+    var val = Math.abs(pct);
+    var ptxt = val >= 10 ? fa(String(Math.round(val))) : fa(String(Math.round(val * 10) / 10));
+    return 'نسبت به ' + label + ': ' + sign + ptxt + '٪ ' + arrow;
+  }
+  function cmpClass(txt) {
+    if (txt.indexOf('▲') >= 0 || txt.indexOf('جدید') >= 0) return 'k-cmp up';
+    if (txt.indexOf('▼') >= 0) return 'k-cmp down';
+    return 'k-cmp';
+  }
+
+  var curWeek = weekKey(today);
+  var pWeek = prevWeekKey(curWeek);
+
+  var invWeekSum = 0, invWeekM = 0, invPWeekSum = 0, invPWeekM = 0;
+  var invMonthSum = 0, invMonthM = 0, invPMonthSum = 0, invPMonthM = 0;
+  var invYearSum = 0, invYearM = 0;
+
+  (DB.invoices || []).forEach(function (i) {
+    var ds = en(String(i.date || ''));
+    var val = amount(i.total);
+    var meters = invMeters(i.inquiryData);
+    var wk = weekKey(ds);
     if (wk[0] === curWeek[0] && wk[1] === curWeek[1] && curWeek[0]) {
-      storeWeekSum += tot; storeWeekM += meters;
+      invWeekSum += val; invWeekM += meters;
+    }
+    if (wk[0] === pWeek[0] && wk[1] === pWeek[1] && pWeek[0]) {
+      invPWeekSum += val; invPWeekM += meters;
+    }
+    if (ds.indexOf(monthPrefix) === 0) {
+      invMonthSum += val; invMonthM += meters;
+    }
+    if (ds.indexOf(prevMonthPrefix) === 0) {
+      invPMonthSum += val; invPMonthM += meters;
+    }
+    if (ds.indexOf(yearPrefix) === 0) {
+      invYearSum += val; invYearM += meters;
     }
   });
 
-  const savedInq = (DB.inquiries || []).length;
-  const colors = salesColorMap(y);
+  var storeWeekSum = 0, storeWeekM = 0, storePWeekSum = 0, storePWeekM = 0;
+  var storeMonthSum = 0, storeMonthM = 0, storePMonthSum = 0, storePMonthM = 0;
+  (DB.storeSales || []).forEach(function (s) {
+    var tot = amount(s.total);
+    var meters = storeItemsMeterage(storeParseItems(s));
+    var ds = en(String(s.date || ''));
+    var wk = weekKey(ds);
+    if (wk[0] === curWeek[0] && wk[1] === curWeek[1] && curWeek[0]) {
+      storeWeekSum += tot; storeWeekM += meters;
+    }
+    if (wk[0] === pWeek[0] && wk[1] === pWeek[1] && pWeek[0]) {
+      storePWeekSum += tot; storePWeekM += meters;
+    }
+    if (ds.indexOf(monthPrefix) === 0) {
+      storeMonthSum += tot; storeMonthM += meters;
+    }
+    if (ds.indexOf(prevMonthPrefix) === 0) {
+      storePMonthSum += tot; storePMonthM += meters;
+    }
+  });
+
+  var savedInq = (DB.inquiries || []).length;
+  var cW = cmpText(invWeekSum, invPWeekSum, 'هفته قبل');
+  var cM = cmpText(invMonthSum, invPMonthSum, 'ماه قبل');
+  var cSW = cmpText(storeWeekSum, storePWeekSum, 'هفته قبل');
+  var cSM = cmpText(storeMonthSum, storePMonthSum, 'ماه قبل');
+
+  const monthInvs = (DB.invoices || []).filter(i => en(String(i.date || '')).indexOf(monthPrefix) === 0);
+  const colors = salesColorMap(String(cy));
   const recent = [...DB.invoices].sort((a, b) => {
     const ka = (a.date || '') + (a.time || '') + String(a.id || '').padStart(8, '0');
     const kb = (b.date || '') + (b.time || '') + String(b.id || '').padStart(8, '0');
@@ -1926,21 +2015,44 @@ function renderHome() {
   const maxTop = topList.length ? topList[0][1] : 1;
 
   let html = `
+    <div class="muted" style="margin-bottom:8px;font-size:12px">فروش هفته و ماه · فروشگاه · مقایسه با دوره قبل</div>
     <div class="kpi-grid">
-      <div class="kpi-card" style="border-top-color:#0284c7"><div class="k-label">فروش امروز</div><div class="k-value ltr">${fmt(dayTotal)}</div></div>
-      <div class="kpi-card" style="border-top-color:#0ea5e9"><div class="k-label">حواله امروز</div><div class="k-value">${fa(dayCount)} فقره</div></div>
-      <div class="kpi-card" style="border-top-color:#059669"><div class="k-label">فروش ماه</div><div class="k-value ltr">${fmt(monthTotal)}</div></div>
-      <div class="kpi-card" style="border-top-color:#8b5cf6"><div class="k-label">میانگین حواله</div><div class="k-value ltr">${fmt(avgMonth)}</div></div>
-      <div class="kpi-card" style="border-top-color:#0ea5e9"><div class="k-label">فروشگاه هفته</div><div class="k-value ltr">${fmt(storeWeekSum)}</div><div class="k-sub">متراژ ${fmtMeter(storeWeekM)}</div></div>
-      <div class="kpi-card" style="border-top-color:#059669"><div class="k-label">فروشگاه ماه</div><div class="k-value ltr">${fmt(storeMonthSum)}</div><div class="k-sub">متراژ ${fmtMeter(storeMonthM)}</div></div>
-      <div class="kpi-card kpi-click" id="homeSavedInq" style="border-top-color:#f59e0b"><div class="k-label">استعلام ذخیره‌شده</div><div class="k-value">${fa(savedInq)} مورد</div><div class="k-sub">برای مشاهده بزنید</div></div>
-      <div class="kpi-card" style="border-top-color:#6366f1"><div class="k-label">فروش سال ${fa(y)}</div><div class="k-value ltr">${fmt(yearTotal)}</div><div class="k-sub">ماه ${fa(cm)}</div></div>
+      <div class="kpi-card" style="border-top-color:#0284c7">
+        <div class="k-label">فروش هفته</div>
+        <div class="k-value ltr">${fmt(invWeekSum)}</div>
+        <div class="k-sub">متراژ ${fmtMeter(invWeekM)} متر</div>
+        <div class="${cmpClass(cW)}">${cW}</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#059669">
+        <div class="k-label">فروش ماه</div>
+        <div class="k-value ltr">${fmt(invMonthSum)}</div>
+        <div class="k-sub">متراژ ${fmtMeter(invMonthM)} متر</div>
+        <div class="${cmpClass(cM)}">${cM}</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#0ea5e9">
+        <div class="k-label">فروشگاه هفته</div>
+        <div class="k-value ltr">${fmt(storeWeekSum)}</div>
+        <div class="k-sub">متراژ ${fmtMeter(storeWeekM)} متر</div>
+        <div class="${cmpClass(cSW)}">${cSW}</div>
+      </div>
+      <div class="kpi-card" style="border-top-color:#8b5cf6">
+        <div class="k-label">فروشگاه ماه</div>
+        <div class="k-value ltr">${fmt(storeMonthSum)}</div>
+        <div class="k-sub">متراژ ${fmtMeter(storeMonthM)} متر</div>
+        <div class="${cmpClass(cSM)}">${cSM}</div>
+      </div>
+      <div class="kpi-card kpi-click" id="homeSavedInq" style="border-top-color:#f59e0b">
+        <div class="k-label">استعلام ذخیره‌شده</div>
+        <div class="k-value">${fa(savedInq)} مورد</div>
+        <div class="k-sub">برای مشاهده بزنید</div>
+      </div>
+      <div class="kpi-card kpi-year" style="border-top-color:#6366f1">
+        <div class="k-label">فروش سال ${fa(cy)}</div>
+        <div class="k-value ltr" style="font-size:18px">${fmt(invYearSum)}</div>
+        <div class="k-sub" style="font-size:12px;font-weight:700;color:#475569">متراژ سال: ${fmtMeter(invYearM)} متر</div>
+      </div>
     </div>
-    <div class="quick-actions">
-      <button type="button" class="btn btn-primary" id="homeNewInv">حواله جدید</button>
-      <button type="button" class="btn btn-dark" id="homeInq">استعلام</button>
-      <button type="button" class="btn btn-green" id="homeStore">فروشگاه</button>
-    </div>
+
     <div class="card" style="margin-top:12px"><h2>آخرین حواله‌ها</h2>`;
 
   if (!recent.length) html += `<div class="empty">حواله‌ای ثبت نشده</div>`;
@@ -3558,6 +3670,9 @@ function bindStorePage() {
 
 
 function bindPage(page) {
+  if (page === 'contacts') {
+    try { bindContactsPage(); } catch (e) { console.warn(e); }
+  }
   if (page === 'home') {
     const newInv = document.getElementById('homeNewInv');
     if (newInv) newInv.onclick = function () {
