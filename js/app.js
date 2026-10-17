@@ -598,8 +598,19 @@ async function pushToSupabase() {
 
 
 async function autoPullFromCloud(reason) {
-  // دریافت خودکار کاملاً غیرفعال — فقط دکمه «دریافت از ابر»
-  return false;
+  if (!sbLoggedIn()) return false;
+  if (navigator.onLine === false) return false;
+  if (_cloudBusy) return false;
+  try {
+    await pullFromSupabase({ force: true, pullOnly: true });
+    try { await pullInventoryFromCloud(); } catch (e) {}
+    _cloudSynced = true;
+    try { _lastPullAt = Date.now(); } catch (e) {}
+    return true;
+  } catch (e) {
+    console.warn('auto pull', reason, e);
+    return false;
+  }
 }
 async function pullFromSupabase(opts) {
   opts = opts || {};
@@ -3216,7 +3227,7 @@ function renderSettings() {
       <button type="button" class="btn btn-secondary btn-block" id="btnRestoreLocal">بازیابی بک‌آپ محلی</button>
       <button type="button" class="btn btn-primary btn-block" id="btnSbPull" style="margin-top:10px">⬇ دریافت از ابر</button>
       <button type="button" class="btn btn-secondary btn-block" id="btnSbPush">⬆ ارسال به ابر</button>
-      <p class="muted" style="font-size:11px;margin-top:6px;line-height:1.6">ارسال و دریافت ابر فقط دستی است — با همین دو دکمه. هیچ همگام‌سازی خودکاری انجام نمی‌شود.</p>
+      <p class="muted" style="font-size:11px;margin-top:6px;line-height:1.6">دریافت: با رفرش صفحه یا کشیدن به پایین خودکار است (و دکمه دستی). ارسال: فقط با دکمه و بعد از تأیید شما.</p>
     </div>
     <div class="card">
       <h2>پشتیبان فایل</h2>
@@ -4016,9 +4027,13 @@ function bindPage(page) {
     };
     if (sbPush) sbPush.onclick = async () => {
       if (!sbLoggedIn()) return alert('ابتدا وارد شوید');
+      if (!confirm('آیا مطمئن هستید که می‌خواهید همه اطلاعات این گوشی را به ابر ارسال کنید؟\n\nحواله‌ها، استعلام‌ها، فروشگاه و مانده مشتری‌ها ارسال می‌شوند.')) {
+        return;
+      }
       try {
         sbPush.textContent = 'در حال ارسال...';
         await pushToSupabase();
+        try { _localDirty = false; } catch (e) {}
         alert('داده حساب شما به ابر ارسال شد');
       } catch (e) {
         alert('خطا: ' + e.message);
@@ -4087,8 +4102,25 @@ try {
 
 // با باز شدن اپ: اگر لاگین است از ابر بگیر (داده ویندوز بیاید)
 (function bootCloudSync() {
-  // دریافت خودکار هنگام باز شدن غیرفعال
-  if (sbLoggedIn()) _cloudSynced = true;
+  // رفرش صفحه / باز شدن اپ → دریافت خودکار از ابر
+  if (!sbLoggedIn()) return;
+  _cloudSynced = true;
+  var banner = document.createElement('div');
+  banner.id = 'syncBanner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#0284c7;color:#fff;text-align:center;padding:8px;font-size:13px;font-family:Vazirmatn,Tahoma,sans-serif;';
+  banner.textContent = 'در حال دریافت از ابر...';
+  document.body.appendChild(banner);
+  autoPullFromCloud('boot').then(function (ok) {
+    banner.textContent = ok ? 'داده ابر به‌روز شد' : 'ابر در دسترس نیست — داده محلی';
+    banner.style.background = ok ? '#059669' : '#b45309';
+    if (ok) {
+      try {
+        var active = document.querySelector('.nav-btn.active');
+        go(active ? active.dataset.page : 'home', { keepScroll: true });
+      } catch (e) { try { go('home'); } catch (e2) {} }
+    }
+    setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 1600);
+  });
 })();
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
   navigator.serviceWorker.register('./sw.js').catch(function () {});
@@ -4123,7 +4155,7 @@ async function refreshAllFromCloud(showAlert) {
   }
   try {
     setSyncFlash('down');
-    await pullFromSupabase({ force: true });
+    await pullFromSupabase({ force: true, pullOnly: true });
     try { await pullInventoryFromCloud(); } catch (e) { console.warn(e); }
     _cloudSynced = true;
     try { _lastPullAt = Date.now(); } catch (e) {}
@@ -4188,8 +4220,7 @@ async function refreshAllFromCloud(showAlert) {
         ind.style.display = 'block';
         ind.textContent = 'در حال دریافت...';
       }
-      Promise.resolve(false).then(function (ok) { // pull-to-refresh ابر غیرفعال — فقط دکمه دریافت از ابر
-      
+      refreshAllFromCloud(false).then(function (ok) {
         if (ind) {
           ind.textContent = ok ? 'به‌روز شد' : 'ناموفق';
           ind.style.background = ok ? '#059669' : '#b91c1c';
