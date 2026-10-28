@@ -1,6 +1,6 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
-const APP_VERSION = '2.3.2';
+const APP_VERSION = '2.4.1';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -225,7 +225,7 @@ async function sbDelete(path) {            // فقط برای حذف استعل�
 }
 const OWNER_EMAIL = 'arash.e.maleki@gmail.com';
 function isOwner() { return String(Auth.email() || '').trim().toLowerCase() === OWNER_EMAIL; }
-const OWNER_PAGES = ['store', 'balance', 'calc', 'parquet', 'free'];
+const OWNER_PAGES = ['store', 'balance', 'calc', 'parquet', 'free', 'salesrep'];
 /* PDF ساده از تصویر بوم (JPEG داخل PDF) — بدون کتابخانه */
 async function pdfFromCanvas(cv) {
   const jb = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.97)), jpg = new Uint8Array(await jb.arrayBuffer());

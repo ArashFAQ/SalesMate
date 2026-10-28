@@ -1,6 +1,6 @@
 /* لایه‌ی داده: همه چیز فقط از ابر خوانده می‌شود و در IndexedDB کش می‌شود (آفلاین هم می‌توان دید) */
 'use strict';
-const OWNER_DS = ['store', 'calc', 'parquet_sales', 'free_items', 'balance'];
+const OWNER_DS = ['store', 'calc', 'parquet_sales', 'free_items', 'balance', 'sales_report'];
 const DS = {
   invoices: { path: u => '/rest/v1/invoices?user_id=eq.' + u + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data&order=id.asc', user: true, label: 'حواله‌ها' },
   balances: { path: u => '/rest/v1/customer_balances?user_id=eq.' + u + '&select=customer,adjustment', user: true, label: 'مانده‌ها' },
@@ -11,7 +11,8 @@ const DS = {
   calc: { path: u => '/rest/v1/calc_notebook?user_id=eq.' + u + '&select=payload,updated_at&order=updated_at.desc&limit=1', user: true, label: 'مشتریان و محاسبات', single: true },
   parquet_sales: { snap: true, label: 'آمار پارکت' },
   free_items: { snap: true, label: 'سمپل و استند' },
-  balance: { snap: true, label: 'بالانس موجودی' }
+  balance: { snap: true, label: 'بالانس موجودی' },
+  sales_report: { snap: true, label: 'تحلیل فروش' }
 };
 const Store = { data: {}, at: {}, err: {}, busy: false };
 
