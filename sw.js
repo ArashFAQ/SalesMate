@@ -1,11 +1,22 @@
-const CACHE = 'salesmate-mw-v1.71';
-const ASSETS = ['./', './index.html', './css/app.css', './js/app.js', './manifest.json', './icon.svg'];
+// SalesMate موبایل — سرویس‌ورکر: شبکه اول (تا به‌روزرسانی‌ها همیشه برسد)، اگر آفلاین بود از کش
+const VERSION = 'sm-mobile-2.3.1';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './css/app.css?v=2.3.1',
+  './js/core.js?v=2.3.1', './js/data.js?v=2.3.1', './js/charts.js?v=2.3.1', './js/pages_a.js?v=2.3.1',
+  './js/pages_b.js?v=2.3.1', './js/pages_c.js?v=2.3.1', './js/inquiry_new.js?v=2.3.1', './js/calc_tool.js?v=2.3.1', './js/app.js?v=2.3.1',
+  './fonts/Vazirmatn-Regular.ttf', './fonts/Vazirmatn-Medium.ttf', './fonts/Vazirmatn-Bold.ttf'];
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS).catch(() => {})).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k))))
+    .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', e => {
-  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('./index.html'))));
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  e.respondWith(fetch(req).then(res => {
+    const copy = res.clone();
+    caches.open(VERSION).then(c => c.put(req, copy)).catch(() => {});
+    return res;
+  }).catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
 });
