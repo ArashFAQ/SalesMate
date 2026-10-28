@@ -1,6 +1,6 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.3.2';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 

@@ -3,7 +3,7 @@
 const Pages = {};
 const TAB_FA = { parquet: 'پارکت', mdf: 'ام‌دی‌اف', raw: 'ام‌دی‌اف خام' };
 
-function searchBox(ph, val) { return '<input class="search" id="q" type="search" placeholder="' + esc(ph) + '" value="' + esc(val || '') + '" autocomplete="off">'; }
+function searchBox(ph, val) { return '<input class="search" id="q" type="search" enterkeyhint="search" placeholder="' + esc(ph) + '" value="' + esc(val || '') + '" autocomplete="off">'; }
 function noData(name) { return '<div class="card empty">' + esc(name) + ' هنوز دریافت نشده.<br>با دکمه‌ی ⟳ بالای صفحه به‌روزرسانی کنید.' + (Store.err[name] ? '<div class="err-t">' + esc(Store.err[name]) + '</div>' : '') + '</div>'; }
 function snapMissing(k) {
   return '<div class="card empty">داده‌ی «' + esc(DS[k].label) + '» هنوز در ابر نیست.<br><span class="muted">در ویندوز یک‌بار «ارسال به ابر» را بزنید و فایل SUPABASE_MOBILE.sql را در Supabase اجرا کرده باشید.</span>' + (Store.err[k] ? '<div class="err-t">' + esc(Store.err[k]) + '</div>' : '') + '</div>';

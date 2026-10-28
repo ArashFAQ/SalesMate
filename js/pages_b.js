@@ -105,11 +105,11 @@ Pages.inventory = {
     const sum = (a, k) => a.reduce((s, x) => s + (+x[k] || 0), 0), n0 = v => fa(Math.round(v).toLocaleString('en-US'));
     root.innerHTML = '<div class="grid2">' + kpi('b-blue', 'پارکت — جمع کارتن', n0(sum(P, 'cartons'))) + kpi('b-green', 'پارکت — جمع متر مربع', fm(sum(P, 'meters'), 1)) + kpi('b-violet', 'ام‌دی‌اف — جمع پالت', n0(sum(M, 'cartons'))) + kpi('b-amber', 'ام‌دی‌اف — جمع ورق', n0(sum(M, 'meters'))) + '</div>' +
       '<div class="muted" style="margin:6px 4px 10px">آخرین به‌روزرسانی موجودی: ' + (upd ? fa(upd.slice(0, 16).replace('T', ' ')) : '—') + '</div>' +
-      searchBox('جستجوی کد، نام کالا یا کد طرح…', st.q) + '<div class="chips">' + [['all', 'همه کالاها'], ['p', 'پارکت'], ['m', 'ام‌دی‌اف']].map(x => '<button class="chip' + (st.c === x[0] ? ' on' : '') + '" data-c="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
+      searchBox('جستجوی نام کالا…', st.q) + '<div class="chips">' + [['all', 'همه کالاها'], ['p', 'پارکت'], ['m', 'ام‌دی‌اف']].map(x => '<button class="chip' + (st.c === x[0] ? ' on' : '') + '" data-c="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' +
       '<div class="chips">' + [['all', 'همه'], ['pos', 'موجود'], ['zero', 'تمام‌شده']].map(x => '<button class="chip' + (st.f === x[0] ? ' on' : '') + '" data-f="' + x[0] + '">' + x[1] + '</button>').join('') + '</div><div id="list"></div>';
     const draw = () => {
       const q = customerKey(st.q);
-      const rows = list.filter(x => (st.c === 'all' || (st.c === 'm') === isMdfName(x.product_name)) && (!q || customerKey([x.product_code, x.product_name, x.design_codes].join(' ')).includes(q)) && (st.f === 'all' || (st.f === 'pos' ? (+x.cartons > 0 || +x.meters > 0) : !(+x.cartons > 0 || +x.meters > 0))));
+      const rows = list.filter(x => (st.c === 'all' || (st.c === 'm') === isMdfName(x.product_name)) && (!q || customerKey(x.product_name || '').includes(q)) && (st.f === 'all' || (st.f === 'pos' ? (+x.cartons > 0 || +x.meters > 0) : !(+x.cartons > 0 || +x.meters > 0))));
       root.querySelector('#list').innerHTML = '<div class="muted" style="margin-bottom:6px">' + fa(rows.length) + ' کالا</div>' + rows.slice(0, 300).map(x => {
         const z = !(+x.cartons > 0 || +x.meters > 0), mdf = isMdfName(x.product_name);
         return '<div class="item" style="border-inline-start-color:' + (z ? '#DC2626' : '#059669') + '"><div class="row between"><span class="t">' + fa(en(x.product_code || '')) + '</span><span class="' + (z ? 'debt' : 'amt') + '">' + fa(qtyInt(x.cartons)) + (mdf ? ' پالت' : ' کارتن') + '</span></div>' +

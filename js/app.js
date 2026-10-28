@@ -54,4 +54,5 @@ async function boot() {
   if (navigator.onLine !== false && (stale || !Store.data.invoices)) { await refreshAll(); rerender(); }
   document.addEventListener('visibilitychange', async () => { if (!document.hidden && navigator.onLine !== false && Date.now() - (Store.lastAll || 0) > 10 * 60 * 1000) { await refreshAll(); rerender(); } });
 }
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'q') { e.preventDefault(); e.target.blur(); } });
 boot();
