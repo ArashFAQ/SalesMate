@@ -116,8 +116,13 @@ function showInvoice(id) {
     '<div class="pill-row"><span>مبلغ</span><b class="amt">' + fmt(i.total) + ' ریال</b></div><div class="pill-row"><span>پرداختی</span><b>' + fmt((i.paid_amount == null || String(i.paid_amount).trim() === '') ? i.total : i.paid_amount) + '</b></div>' +
     '<div class="pill-row"><span>مانده</span><b class="' + (b > 0 ? 'debt' : 'cred') + '">' + (b > 0 ? 'بدهکار ' + fmt(b) : b < 0 ? 'طلبکار ' + fmt(-b) : 'تسویه') + '</b></div>' +
     (d ? '<div class="pill-row"><span>مقدار</span><b>' + inqQty(d) + '</b></div>' : '') + '</div>';
-  if (d && (d.rows || []).length) html += '<div class="card"><h2>اقلام</h2>' + inqTable(d) + inqSummaryHtml(d) + '<button class="btn block" id="shInv" style="margin-top:10px">ارسال متن در پیام‌رسان</button></div>';
-  openSheet('حواله ' + fa(en(i.invoice_no || '')), html, body => { const s = body.querySelector('#shInv'); if (s) s.onclick = () => shareText(inqText(d, i.customer)); });
+  if (d && (d.rows || []).length) html += '<div class="card"><h2>اقلام</h2>' + inqTable(d) + inqSummaryHtml(d) + '<div class="grid2" style="margin-top:10px"><button class="btn block" id="shImg">🖼 ارسال تصویر</button><button class="btn block" id="shPdf">📄 ارسال PDF</button></div><button class="btn sec block" id="shInv" style="margin-top:8px">💬 ارسال متن</button></div>';
+  openSheet('حواله ' + fa(en(i.invoice_no || '')), html, body => {
+    const s = body.querySelector('#shInv'); if (s) s.onclick = () => shareText(inqText(d, i.customer));
+    const dd = d ? Object.assign({}, d, { buyer: d.buyer || i.customer, date: d.date || i.date }) : null;
+    const im = body.querySelector('#shImg'), pf = body.querySelector('#shPdf');
+    if (im) im.onclick = () => shareInquiryImage(dd, i.customer); if (pf) pf.onclick = () => shareInquiryImage(dd, i.customer, 'pdf');
+  });
 }
 Pages.invoices = {
   title: 'حواله‌ها', state: { q: '', ym: '' },
