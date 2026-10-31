@@ -32,7 +32,7 @@ function showLogin(msg) {
   document.querySelector('.topbar').classList.add('hidden'); document.getElementById('nav').classList.add('hidden');
   document.body.style.paddingTop = '0'; document.body.style.paddingBottom = '0';
   document.getElementById('app').innerHTML = '<div class="login card"><div class="logo">S</div><h2 style="text-align:center">ورود به SalesMate</h2><div class="muted" style="text-align:center;margin-bottom:8px">با همان ایمیل و رمز برنامه‌ی ویندوز وارد شوید</div>' +
-    '<label>ایمیل</label><input id="em" type="email" class="ltr" autocomplete="username" inputmode="email"><label>رمز عبور</label><input id="pw" type="password" class="ltr" autocomplete="current-password">' +
+    '<label>ایمیل یا نام کاربری</label><input id="em" type="text" class="ltr" autocomplete="username" inputmode="email"><label>رمز عبور</label><input id="pw" type="password" class="ltr" autocomplete="current-password">' +
     '<button class="btn block" id="lg" style="margin-top:14px">ورود</button><div class="err-t" id="le">' + esc(msg || '') + '</div></div>';
   const lg = document.getElementById('lg'), pw = document.getElementById('pw');
   const doLogin = async () => {

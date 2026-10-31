@@ -1,6 +1,7 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
-const APP_VERSION = '2.4.2';
+function loginEmail(v) { v = String(v || '').trim(); return v && v.indexOf('@') < 0 ? v.toLowerCase() + '@sales.local' : v; }
+const APP_VERSION = '2.4.3';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -187,7 +188,7 @@ const Auth = {
     lsSet('sm_sess', { access_token: d.access_token, refresh_token: d.refresh_token || prev.refresh_token || '', user_id: uid, email: email, exp: Date.now() + ((d.expires_in || 3600) - 60) * 1000 });
   },
   async login(email, pass) {
-    const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim(), password: pass }) });
+    const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: loginEmail(email), password: pass }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.access_token) throw new Error(d.error_description || d.msg || d.message || 'ایمیل یا رمز اشتباه است');
     this._save(d);
