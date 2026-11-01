@@ -121,8 +121,8 @@ Pages.balance = {
 
 /* ── مشتریان و محاسبات (فقط مشاهده‌ی دفترچه و آخرین محاسبه) ── */
 function cTrunc(v, d) { const m = Math.pow(10, d || 0); return Math.trunc((+v + 2.220446049250313e-16) * m) / m; }
-function cTax(a) { a = +a || 0; return a <= 0 ? null : Math.trunc(a / 1.1 / 10); }
-function cPer(a, c) { a = +a || 0; c = +c || 0; return (a <= 0 || c <= 0) ? null : Math.trunc(a / 1.1 / c + 1); }
+function cTax(a) { a = +a || 0; return a <= 0 ? null : Math.trunc(a / 11 + 1e-6); }
+function cPer(a, c) { a = +a || 0; c = +c || 0; return (a <= 0 || c <= 0) ? null : Math.trunc(a * 10 / (11 * c) + 1 + 1e-6); }
 Pages.calc = {
   title: 'مشتریان و محاسبات', state: { tab: 'cust', q: '' },
   render(root) {
@@ -139,7 +139,7 @@ Pages.calc = {
       const rows = sizes.map(s => { const e = calc[s.id] || {}, cnt = +e.count || 0, a = +e.amount || 0, cub = cTrunc((+s.volume || 0) * cnt, 2), tax = cTax(a); sh += cnt; am += a; cu += cub; if (tax) tx += tax; return '<tr><td class="r">' + esc(fa(s.name)) + '</td><td class="n">' + fa(cnt) + '</td><td class="n">' + fm(cub, 2) + '</td><td class="n">' + fmt(a) + '</td><td class="n">' + (cPer(a, cub) ? fmt(cPer(a, cub)) : '—') + '</td><td class="n">' + (tax ? fmt(tax) : '—') + '</td></tr>'; });
       const fc = C.freeCalc || {};
       body.innerHTML = '<div class="grid2">' + kpi('b-blue', 'تعداد ورق', fa(sh)) + kpi('b-green', 'متر مکعب', fm(cTrunc(cu, 2), 2)) + kpi('b-violet', 'مبلغ', fmt(am)) + kpi('b-amber', 'مالیات', fmt(tx)) + '</div><div class="card" style="margin-top:12px"><div class="scrollx"><table class="tbl"><tr><th>سایز</th><th>تعداد</th><th>م³</th><th>مبلغ</th><th>هر م³</th><th>مالیات</th></tr>' + rows.join('') + '</table></div></div>' +
-        (fc.amount ? '<div class="card"><h2>محاسبه‌ی آزاد</h2><div class="pill-row"><span>مبلغ</span><b>' + fmt(fc.amount) + '</b></div><div class="pill-row"><span>متر مکعب</span><b>' + fm(fc.cubic, 2) + '</b></div><div class="pill-row"><span>هر متر مکعب</span><b>' + (cPer(fc.amount, fc.cubic) ? fmt(cPer(fc.amount, fc.cubic)) : '—') + '</b></div><div class="pill-row"><span>مالیات</span><b>' + (cTax(fc.amount) ? fmt(cTax(fc.amount)) : '—') + '</b></div></div>' : '');
+        (fc.amount ? '<div class="card"><h2>محاسبه‌ی آزاد</h2><div class="pill-row"><span>مبلغ</span><b>' + fmt(fc.amount) + '</b></div><div class="pill-row"><span>متر مکعب</span><b>' + fm(cTrunc(fc.cubic, 2), 2) + '</b></div><div class="pill-row"><span>هر متر مکعب</span><b>' + (cPer(fc.amount, cTrunc(fc.cubic, 2)) ? fmt(cPer(fc.amount, cTrunc(fc.cubic, 2))) : '—') + '</b></div><div class="pill-row"><span>مالیات</span><b>' + (cTax(fc.amount) ? fmt(cTax(fc.amount)) : '—') + '</b></div></div>' : '');
     }
     root.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { st.tab = b.dataset.t; this.render(root); });
   }
