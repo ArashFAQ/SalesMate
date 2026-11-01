@@ -47,7 +47,7 @@ const InqBuilder = {
     root.innerHTML =
       '<div class="row between" style="margin-bottom:10px"><button class="btn sm sec" id="ibBack">‹ لیست استعلام‌ها</button><button class="btn sm sec" id="ibClear">پاک‌کردن فرم</button></div>' +
       '<div class="seg" id="ibTabs">' + [['parquet', 'پارکت'], ['mdf', 'ام‌دی‌اف'], ['raw', 'ام‌دی‌اف خام']].map(x => '<button data-t="' + x[0] + '" class="' + (S.tab === x[0] ? 'on' : '') + '">' + x[1] + '</button>').join('') + '</div>' +
-      '<div class="card" id="ibBuyerCard"><div style="position:relative"><label>نام خریدار — چند حرف اول را بنویسید</label><input id="ibBuyer" class="inqf" autocomplete="off" enterkeyhint="next" placeholder="نام مشتری…" value="' + esc(S.buyer) + '"><div class="sugg hidden" id="ibSug"></div></div><div class="muted" id="ibBal" style="margin-top:4px"></div>' +
+      '<div class="card" id="ibBuyerCard"><div style="position:relative"><label>نام خریدار — هر بخشی از نام را بنویسید</label><input id="ibBuyer" class="inqf" autocomplete="off" enterkeyhint="next" placeholder="نام مشتری…" value="' + esc(S.buyer) + '"><div class="sugg hidden" id="ibSug"></div></div><div class="muted" id="ibBal" style="margin-top:4px"></div>' +
       '<label>تاریخ</label><input id="ibDate" class="inqf ltr" inputmode="decimal" enterkeyhint="next" value="' + esc(fa(S.date)) + '"></div>' +
       '<div class="row between" style="margin:4px 2px 8px"><b>اقلام کالا</b><button class="btn sm sec" id="ibAdd">+ افزودن ردیف</button></div><div id="ibRows"></div>' +
       '<div class="card"><div class="pill-row"><span>جمع اقلام</span><b id="ibSub">۰</b></div><label>هزینه انبارداری</label><input id="ibWh" class="inqf" enterkeyhint="next" value="' + esc(S.warehouse) + '"><label>هزینه حمل</label><input id="ibTr" class="inqf" enterkeyhint="next" value="' + esc(S.transport) + '">' +
@@ -152,7 +152,7 @@ const InqBuilder = {
     const S = this.S, q = id => this.root.querySelector('#' + id), inp = q('ibBuyer'), sg = q('ibSug');
     const show = () => {
       const k = customerKey(inp.value); if (!k) { sg.classList.add('hidden'); return; }
-      const starts = [], inc = []; this.custs.forEach(c => { const n = customerKey(c.name); if (n.startsWith(k)) starts.push(c); else if (n.includes(k)) inc.push(c); });
+      const starts = [], inc = []; const ws = k.split(' ').filter(Boolean); this.custs.forEach(c => { const n = customerKey(c.name); if (n.startsWith(k)) starts.push(c); else if (n.includes(k) || ws.every(w => n.includes(w))) inc.push(c); });
       const list = starts.concat(inc).slice(0, 8);
       if (!list.length || (list.length === 1 && customerKey(list[0].name) === k)) { sg.classList.add('hidden'); return; }
       sg.innerHTML = list.map(c => '<div data-n="' + esc(c.name) + '"><b>' + esc(c.name) + '</b>' + (c.bal > 0 ? ' <span class="debt" style="font-size:12px">بدهکار ' + abbr(c.bal) + '</span>' : c.bal < 0 ? ' <span class="cred" style="font-size:12px">طلبکار ' + abbr(-c.bal) + '</span>' : '') + '</div>').join('');
