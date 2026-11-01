@@ -31,7 +31,7 @@ const InqBuilder = {
   snapshot() {
     const S = this.S, rows = S.rows.map((r, i) => Object.assign({ index: i + 1 }, r, { cost: this.rowCost(r) }));
     const sub = rows.reduce((a, r) => a + r.cost, 0);
-    return { tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.tab === 'parquet' ? S.shaba : '', total: sub + amount(S.debt) - amount(S.discount) };
+    return { tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.shaba, total: sub + amount(S.debt) - amount(S.discount) };
   },
   /* ───── رندر ───── */
   mount(root, preset, onClose) {
@@ -53,7 +53,7 @@ const InqBuilder = {
       '<div class="card"><div class="pill-row"><span>جمع اقلام</span><b id="ibSub">۰</b></div><label>هزینه انبارداری</label><input id="ibWh" class="inqf" enterkeyhint="next" value="' + esc(S.warehouse) + '"><label>هزینه حمل</label><input id="ibTr" class="inqf" enterkeyhint="next" value="' + esc(S.transport) + '">' +
       '<label>بدهی پیشین (ریال)</label><input id="ibDebt" class="inqf ltr" inputmode="numeric" enterkeyhint="next" value="' + esc(commas(S.debt) || '0') + '"><label>تخفیف (ریال)</label><input id="ibDisc" class="inqf ltr" inputmode="numeric" enterkeyhint="next" value="' + esc(commas(S.discount) || '0') + '">' +
       '<div class="pill-row" style="margin-top:8px"><span><b>جمع کل</b></span><b class="amt" id="ibTot" style="font-size:17px">۰</b></div><div class="muted" id="ibWords"></div></div>' +
-      '<div class="card"><label>اعتبار استعلام</label><input id="ibVal" class="inqf" enterkeyhint="next" value="' + esc(S.validity) + '">' + (S.tab === 'parquet' ? '<label>شماره شبا</label><input id="ibSh" class="inqf ltr" enterkeyhint="done" value="' + esc(S.shaba) + '">' : '') + '</div>' +
+      '<div class="card"><label>اعتبار استعلام</label><input id="ibVal" class="inqf" enterkeyhint="next" value="' + esc(S.validity) + '">' + '<label>شماره شبا</label><input id="ibSh" class="inqf ltr" enterkeyhint="done" value="' + esc(S.shaba) + '">' + '</div>' +
       '<div class="grid2"><button class="btn block" id="ibImg">🖼 ارسال تصویر</button><button class="btn block" id="ibPdf">📄 ارسال PDF</button></div><div style="margin-top:8px"><button class="btn sec block" id="ibTxt">💬 ارسال متن</button></div>' +
       '<div class="grid2" style="margin-top:8px"><button class="btn green block" id="ibSave">💾 ذخیره روی گوشی</button><button class="btn sec block" id="ibPrev">👁 پیش‌نمایش</button></div>';
     const q = id => root.querySelector('#' + id);
