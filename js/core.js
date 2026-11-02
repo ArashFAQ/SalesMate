@@ -1,7 +1,7 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
 function loginEmail(v) { v = String(v || '').trim(); return v && v.indexOf('@') < 0 ? v.toLowerCase() + '@sales.local' : v; }
-const APP_VERSION = '2.4.6';
+const APP_VERSION = '2.4.7';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -292,5 +292,12 @@ function debounce(fn, ms) { let t; return function () { const a = arguments; cle
 function itemsOf(inv) {                      // اقلام یک حواله از inquiry_data
   let d = inv.inquiry_data || inv.inquiryData; if (!d) return null;
   if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return null; } }
-  return d && typeof d === 'object' ? d : null;
+  if (!d || typeof d !== 'object') return null;
+  if (d.tab === 'analysis_import') d.tab = isMdfRows(d.rows) ? 'mdf' : 'parquet';   // حواله‌ی اکسل: ام دی اف/خام از روی نام کالا
+  return d;
+}
+function isMdfRows(rows) {
+  const names = (rows || []).map(r => String((r && (r.name || r.type)) || '')).join(' ').toLowerCase();
+  if (!names || names.indexOf('پارکت') >= 0) return false;
+  return ['ام دی اف', 'ام‌دی‌اف', 'mdf', 'هایگلاس', 'ملامینه', 'خام'].some(k => names.indexOf(k) >= 0);
 }

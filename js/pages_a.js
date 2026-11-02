@@ -112,7 +112,7 @@ function invItemHtml(i) {
 function showInvoice(id) {
   const i = (Store.data.invoices || []).find(x => x.id === id); if (!i) return;
   const d = itemsOf(i), b = invBalance(i);
-  let html = '<div class="card"><div class="pill-row"><span>مشتری</span><b>' + esc(i.customer) + '</b></div><div class="pill-row"><span>شماره / تاریخ</span><b>' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + ' ' + fa(i.time || '') + '</b></div>' +
+  let html = '<div class="card"><div class="pill-row"><span>مشتری</span><b>' + esc(i.customer) + '</b></div><div class="pill-row"><span>شماره / تاریخ</span><b>' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + '</b></div>' +
     '<div class="pill-row"><span>مبلغ</span><b class="amt">' + fmt(i.total) + ' ریال</b></div><div class="pill-row"><span>پرداختی</span><b>' + fmt((i.paid_amount == null || String(i.paid_amount).trim() === '') ? i.total : i.paid_amount) + '</b></div>' +
     '<div class="pill-row"><span>مانده</span><b class="' + (b > 0 ? 'debt' : 'cred') + '">' + (b > 0 ? 'بدهکار ' + fmt(b) : b < 0 ? 'طلبکار ' + fmt(-b) : 'تسویه') + '</b></div>' +
     (d ? '<div class="pill-row"><span>مقدار</span><b>' + inqQty(d) + '</b></div>' : '') + '</div>';

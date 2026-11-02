@@ -1,8 +1,8 @@
 // SalesMate موبایل — سرویس‌ورکر: شبکه اول (تا به‌روزرسانی‌ها همیشه برسد)، اگر آفلاین بود از کش
-const VERSION = 'sm-mobile-2.4.6';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './css/app.css?v=2.4.6',
-  './js/core.js?v=2.4.6', './js/data.js?v=2.4.6', './js/charts.js?v=2.4.6', './js/pages_a.js?v=2.4.6',
-  './js/pages_b.js?v=2.4.6', './js/pages_c.js?v=2.4.6', './js/pages_d.js?v=2.4.6', './js/inquiry_new.js?v=2.4.6', './js/calc_tool.js?v=2.4.6', './js/app.js?v=2.4.6',
+const VERSION = 'sm-mobile-2.4.7';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './css/app.css?v=2.4.7',
+  './js/core.js?v=2.4.7', './js/data.js?v=2.4.7', './js/charts.js?v=2.4.7', './js/pages_a.js?v=2.4.7',
+  './js/pages_b.js?v=2.4.7', './js/pages_c.js?v=2.4.7', './js/pages_d.js?v=2.4.7', './js/inquiry_new.js?v=2.4.7', './js/calc_tool.js?v=2.4.7', './js/app.js?v=2.4.7',
   './fonts/Vazirmatn-Regular.ttf', './fonts/Vazirmatn-Medium.ttf', './fonts/Vazirmatn-Bold.ttf'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS).catch(() => {})).then(() => self.skipWaiting()));
