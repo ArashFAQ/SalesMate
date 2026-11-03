@@ -96,11 +96,60 @@ Pages.home = {
       (isOwner() && Store.data.store ? (() => { const P = storePeriods(); return '<h2 style="margin:14px 4px 6px;font-size:15px">فروشگاه</h2><div class="grid2">' + kpi('b-blue', 'فروشگاه — این هفته', fmt(P.w.a), qsub(P.w.m, P.w.sh)) + kpi('b-green', 'فروشگاه — این ماه', fmt(P.m.a), qsub(P.m.m, P.m.sh)) + '<div style="grid-column:1/-1">' + kpi('b-violet', 'فروشگاه — امسال', fmt(P.y.a), qsub(P.y.m, P.y.sh)) + '</div></div>'; })() : '') +
       '<div class="card" style="margin-top:12px"><h2>حواله‌های اخیر</h2>' + recent.map(invItemHtml).join('') + '</div>' +
       '<div class="card"><h2>برترین مشتریان امسال</h2>' + (top.length ? top.map((c, i) => '<div class="pill-row"><span>' + fa(i + 1) + '. ' + esc(c.name) + '</span><b class="amt">' + fmt(c.year) + '</b></div>').join('') : '<div class="empty">—</div>') + '</div>' +
-      '<div class="grid2"><div class="card"><h2 class="debt">بدهکارها</h2>' + (deb.slice(0, 6).map(c => '<div class="pill-row"><span>' + esc(c.name) + '</span><b class="debt">' + fmt(c.bal) + '</b></div>').join('') || '<div class="empty">—</div>') + '</div>' +
-      '<div class="card"><h2 class="cred">طلبکارها</h2>' + (cre.slice(0, 6).map(c => '<div class="pill-row"><span>' + esc(c.name) + '</span><b class="cred">' + fmt(-c.bal) + '</b></div>').join('') || '<div class="empty">—</div>') + '</div></div>';
+      '<div class="grid2"><div class="card"><h2 class="debt">بدهکارها</h2>' + (deb.slice(0, 6).map(c => '<div class="pill-row" data-stm="' + esc(c.name) + '" style="cursor:pointer"><span>' + esc(c.name) + '</span><b class="debt">' + fmt(c.bal) + '</b></div>').join('') || '<div class="empty">—</div>') + '</div>' +
+      '<div class="card"><h2 class="cred">طلبکارها</h2>' + (cre.slice(0, 6).map(c => '<div class="pill-row" data-stm="' + esc(c.name) + '" style="cursor:pointer"><span>' + esc(c.name) + '</span><b class="cred">' + fmt(-c.bal) + '</b></div>').join('') || '<div class="empty">—</div>') + '</div></div>';
     root.querySelectorAll('[data-inv]').forEach(el => el.onclick = () => showInvoice(+el.dataset.inv));
+    root.querySelectorAll('[data-stm]').forEach(el => el.onclick = () => showStatement(el.dataset.stm));
   }
 };
+
+/* ── صورت‌حساب بدهکاری/طلبکاری مشتری (هم‌قالب استعلام) ── */
+function stmCompute(name) {
+  const invs = (Store.data.invoices || []).filter(i => i.customer === name), adjR = (Store.data.balances || []).find(b => b.customer === name), adj = adjR ? amount(adjR.adjustment) : 0;
+  const debts = []; let credit = 0;
+  invs.forEach(i => { const b = invBalance(i); if (b > 0) debts.push({ no: en(i.invoice_no || ''), date: en(i.date || ''), total: amount(i.total), paid: amount(i.total) - b, rem: b }); else if (b < 0) credit += -b; });
+  const extra = adj > 0 ? adj : 0; if (adj < 0) credit += -adj;
+  debts.sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no));
+  return { debts, credit, extra, balance: debts.reduce((x, d) => x + d.rem, 0) + extra - credit };
+}
+function stmCanvas(name, st) {
+  const W = 800, S = 3, font = 'Vazirmatn, Tahoma, sans-serif', BLUE = '#1565C0', RED = '#DC2626', cred = st.balance < 0;
+  const sums = []; if (!cred) { if (st.debts.length) sums.push(['جمع حواله‌های تسویه‌نشده', fmt(st.debts.reduce((a, d) => a + d.rem, 0)), '#0F172A']); if (st.extra) sums.push(['تعدیل / بدهی پیشین', fmt(st.extra), '#0F172A']); if (st.credit) sums.push(['طلبکاری (کسر از جمع)', '−' + fmt(st.credit), '#059669']); }
+  const n = cred ? 0 : st.debts.length, RH = 40, wordsTxt = numberToWords(Math.abs(st.balance)) + ' ریال';
+  const H = 70 + 12 + 78 + 12 + (cred ? 0 : 34 + n * RH + 14) + sums.length * 30 + (sums.length ? 14 : 0) + 120 + 16;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S; const c = cv.getContext('2d'); c.scale(S, S); c.direction = 'rtl'; c.textBaseline = 'middle';
+  const rr = (x, y, w, h, r, f, st2) => { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); if (f) { c.fillStyle = f; c.fill(); } if (st2) { c.strokeStyle = st2; c.lineWidth = 1.5; c.stroke(); } };
+  const tx = (t, x, y, al, f, col) => { c.textAlign = al; c.font = f; c.fillStyle = col; c.fillText(t, x, y); };
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+  rr(0, 0, W, 70, [14, 14, 0, 0], BLUE); tx(cred ? 'اعلام طلبکاری' : 'اعلام بدهکاری', W - 18, 26, 'right', '800 18px ' + font, '#fff'); tx('SalesMate', W - 18, 52, 'right', '500 12px ' + font, 'rgba(255,255,255,.9)');
+  let y = 82; const bw = (W - 10) / 1.7;
+  rr(W - bw, y, bw, 78, 12, BLUE); tx('نام مشتری', W - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); tx(name, W - 16, y + 46, 'right', '800 16px ' + font, '#fff');
+  const dw = bw * 0.7; rr(0, y, dw, 78, 12, BLUE); tx('تاریخ', dw - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); const t = todayJ(); tx(fa(jfmt(t[0], t[1], t[2])), dw - 16, y + 46, 'right', '800 16px ' + font, '#fff');
+  y += 78 + 12;
+  if (!cred) {
+    const fr = [0.06, 0.14, 0.16, 0.22, 0.21, 0.21], cx = []; let acc = W; fr.forEach(f => { const w = f * W; cx.push(acc - w / 2); acc -= w; });
+    rr(0, y, W, 34, 0, BLUE); ['ردیف', 'شماره حواله', 'تاریخ', 'مبلغ حواله (ریال)', 'پرداخت‌شده (ریال)', 'مانده (ریال)'].forEach((h, j) => tx(h, cx[j], y + 17, 'center', '700 11px ' + font, '#fff')); y += 34;
+    st.debts.forEach((d, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, RH); [fa(i + 1), fa(d.no), fa(d.date), fmt(d.total), fmt(d.paid)].forEach((v, j) => tx(v, cx[j], y + RH / 2, 'center', '500 13px ' + font, '#0F172A')); tx(fmt(d.rem), cx[5], y + RH / 2, 'center', '800 14px ' + font, RED); c.fillStyle = '#e0f2fe'; c.fillRect(0, y + RH - 1, W, 1); y += RH; });
+    y += 14;
+  }
+  sums.forEach((r, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, 30); tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#64748b'); tx(r[1], 14, y + 15, 'left', '800 15px ' + font, r[2]); y += 30; });
+  if (sums.length) y += 14;
+  rr(0, y, W, 104, 14, cred ? '#ECFDF5' : '#FEF2F2', cred ? '#A7F3D0' : '#FECACA');
+  tx(cred ? 'مبلغ طلب شما' : 'جمع کل بدهکاری', W - 18, y + 22, 'right', '500 13px ' + font, '#64748b');
+  tx(fmt(Math.abs(st.balance)) + ' ریال', 18, y + 56, 'left', '900 28px ' + font, cred ? '#059669' : RED); tx(wordsTxt, W - 18, y + 84, 'right', '500 14px ' + font, '#475569');
+  return cv;
+}
+function showStatement(name) {
+  const st = stmCompute(name);
+  if (!st.balance && !st.debts.length) { toast('این مشتری تسویه است', false); return; }
+  openSheet((st.balance < 0 ? 'طلبکاری — ' : 'بدهکاری — ') + name, '<div class="card"><div id="stmPrev" style="text-align:center;min-height:120px"></div><div class="grid2" style="margin-top:10px"><button class="btn block" id="stmImg">🖼 ارسال تصویر</button><button class="btn block" id="stmPdf">📄 ارسال PDF</button></div></div>', body => {
+    const prev = body.querySelector('#stmPrev'), build = async () => { try { await document.fonts.ready; } catch (e) { } return stmCanvas(name, st); };
+    build().then(cv => { cv.style.cssText = 'width:100%;height:auto;border:1px solid var(--line);border-radius:10px'; prev.appendChild(cv); });
+    const txt = (st.balance < 0 ? 'طلبکاری ' : 'بدهکاری ') + name + ': ' + fmt(Math.abs(st.balance)) + ' ریال';
+    body.querySelector('#stmImg').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'png', txt);
+    body.querySelector('#stmPdf').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'pdf', txt);
+  });
+}
 
 /* ── حواله‌ها ── */
 function invItemHtml(i) {
@@ -175,8 +224,9 @@ function showCustomer(name) {
     '<div class="card"><div class="pill-row"><span>مانده</span><b class="' + (c.bal > 0 ? 'debt' : 'cred') + '">' + (c.bal > 0 ? 'بدهکار ' + fmt(c.bal) : c.bal < 0 ? 'طلبکار ' + fmt(-c.bal) : 'تسویه') + '</b></div><div class="pill-row"><span>تعداد حواله</span><b>' + fa(c.count) + '</b></div><div class="pill-row"><span>جمع خرید</span><b>' + fmt(c.total) + '</b></div>' +
     Object.keys(years).sort().reverse().map(y => '<div class="pill-row"><span>سال ' + fa(y) + '</span><b>' + fmt(years[y]) + '</b></div>').join('') + '</div>' +
     (ct && (ct.mobile || ct.phone) ? '<div class="card row between"><span>' + esc(ct.mobile || ct.phone) + '</span><a class="btn sm green" href="tel:' + esc(en(ct.mobile || ct.phone)) + '">تماس</a></div>' : '') +
+    (c.bal !== 0 ? '<button class="btn block" id="stmBtn" style="margin-bottom:10px">' + (c.bal > 0 ? '📄 صورت‌حساب بدهکاری' : '📄 اعلام طلبکاری') + '</button>' : '') +
     '<div class="card"><h2>حواله‌ها</h2>' + invs.slice(0, 60).map(invItemHtml).join('') + '</div>',
-    body => body.querySelectorAll('[data-inv]').forEach(el => el.onclick = () => showInvoice(+el.dataset.inv)));
+    body => { body.querySelectorAll('[data-inv]').forEach(el => el.onclick = () => showInvoice(+el.dataset.inv)); const sb = body.querySelector('#stmBtn'); if (sb) sb.onclick = () => showStatement(name); });
 }
 
 /* ── اطلاعات مشتریان ── */
