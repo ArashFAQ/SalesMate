@@ -129,3 +129,62 @@ function customerColor(name) {
   }
   return _ccMap[String(name || '').trim()] || '#D1D5DB';
 }
+
+/* ── نوع پارکت (جناغی / والنته / بقیه) و ادغام A/B جناغی ── */
+const CH_CODES = ['6542', '6332', '6234', '6223', '6224', '6435', '6545', '6433', '6235'];
+const VAL_CODES = ['7414', '7323', '7322', '7335', '7434', '7524', '7634', '7343', '7465'];
+function parquetType(code, name) {
+  const nm = String(name || ''), low = nm.toLowerCase(), c = en(String(code || '')).replace(/\D/g, '');
+  if (nm.includes('جناغی') || nm.includes('جناقی')) return 'جناغی';
+  if (low.includes('valente') || nm.includes('والنته') || nm.includes('ولنته')) return 'والنته';
+  if (CH_CODES.includes(c)) return 'جناغی';
+  if (VAL_CODES.includes(c)) return 'والنته';
+  return 'بقیه';
+}
+function codeKey(code, name) {
+  const c = en(String(code || '')).trim();
+  if (parquetType(c, name) === 'جناغی') { const m = c.match(/^\s*(\d+)/) || en(String(name || '')).match(/(\d{3,})/); if (m) return m[1]; }
+  return c;
+}
+function codeName(code, name) {
+  let nm = String(name || '').trim();
+  if (parquetType(code, nm) === 'جناغی') nm = nm.replace(/[\s\-_]*\b[ABab]\s*$/, '').trim();
+  return nm;
+}
+function normDate(s) {
+  const p = en(String(s || '')).replace(/-/g, '/').split('/').map(x => parseInt(x, 10));
+  return (p.length >= 3 && p.every(x => !isNaN(x))) ? p[0] + '/' + String(p[1]).padStart(2, '0') + '/' + String(p[2]).padStart(2, '0') : '';
+}
+/* rows: [{d, code, n, a, m, q}] — کارت‌های جناغی/والنته/بقیه + (اختیاری) جدول کدهای پرفروش */
+function typesBoxHtml(id, st, title) {
+  const t = todayJ();
+  if (!st.f) st.f = t[0] + '/01/01';
+  if (!st.t) st.t = t[0] + '/' + p2(t[1]) + '/' + p2(t[2]);
+  return '<div class="card" id="' + id + '"><h2>' + title + '</h2><div class="row" style="gap:8px;margin-bottom:8px"><label class="grow muted">از<input class="search" data-df type="text" inputmode="numeric" dir="ltr" value="' + esc(fa(st.f)) + '"></label><label class="grow muted">تا<input class="search" data-dt type="text" inputmode="numeric" dir="ltr" value="' + esc(fa(st.t)) + '"></label></div><div data-out></div></div>';
+}
+function typesFill(root, id, st, rows, withCodes) {
+  const box = root.querySelector('#' + id); if (!box) return;
+  const out = box.querySelector('[data-out]');
+  const draw = () => {
+    const d1 = normDate(st.f), d2 = normDate(st.t);
+    const sub = rows.filter(r => { const d = normDate(r.d); return (!d1 || (d && d >= d1)) && (!d2 || (d && d <= d2)); });
+    const S = { 'جناغی': { a: 0, m: 0 }, 'والنته': { a: 0, m: 0 }, 'بقیه': { a: 0, m: 0 } }, codes = {};
+    sub.forEach(r => {
+      const k = parquetType(r.code, r.n); S[k].a += r.a; S[k].m += r.m;
+      if (withCodes) { const ck = codeKey(r.code, r.n); if (ck) { const o = codes[ck] || (codes[ck] = { code: ck, a: 0, m: 0, q: 0, names: {} }); o.a += r.a; o.m += r.m; o.q += (r.q || 0); const nm = codeName(r.code, r.n); if (nm) o.names[nm] = (o.names[nm] || 0) + 1; } }
+    });
+    const tot = { a: S['جناغی'].a + S['والنته'].a + S['بقیه'].a, m: S['جناغی'].m + S['والنته'].m + S['بقیه'].m };
+    const kp = (cls, l, v) => kpi(cls, l, fmt(v.a), fm(v.m, 1) + ' متر مربع');
+    let h = '<div class="grid2">' + kp('b-amber', 'پارکت جناغی', S['جناغی']) + kp('b-violet', 'پارکت والنته', S['والنته']) + kp('b-blue', 'بقیه‌ی پارکت‌ها', S['بقیه']) + kp('b-green', 'جمع پارکت', tot) + '</div>';
+    if (withCodes) {
+      const list = Object.values(codes).sort((x, y) => y.a - x.a || y.m - x.m).slice(0, 40);
+      h += '<h2 style="margin:12px 2px 6px;font-size:14px">پرفروش‌ترین کدها (بر اساس مبلغ)</h2>' + (list.length ? '<div style="max-height:430px;overflow:auto;border:1px solid var(--line);border-radius:10px"><table class="tbl"><tr><th>#</th><th>کد / نام</th><th>کارتن</th><th>متر مربع</th><th>مبلغ</th></tr>' +
+        list.map((x, i) => { const nm = Object.entries(x.names).sort((a, b) => b[1] - a[1])[0]; return '<tr><td>' + fa(i + 1) + '</td><td class="r"><b>' + fa(x.code) + '</b><div class="muted" style="font-size:11px">' + esc(nm ? nm[0] : '') + '</div></td><td class="n">' + fa(Math.round(x.q)) + '</td><td class="n">' + fm(x.m, 1) + '</td><td class="n">' + fmt(x.a) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="empty">کدی در این بازه نیست</div>');
+    }
+    h += '<div class="muted" style="margin-top:6px">' + fa(sub.length) + ' ردیف · تشخیص از نام کالا: «جناغی» و «Valente/والنته»</div>';
+    out.innerHTML = h;
+  };
+  box.querySelector('[data-df]').oninput = e => { st.f = en(e.target.value); draw(); };
+  box.querySelector('[data-dt]').oninput = e => { st.t = en(e.target.value); draw(); };
+  draw();
+}

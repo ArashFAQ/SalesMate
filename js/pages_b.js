@@ -217,7 +217,7 @@ function storeLine(it, tab) {
   return b.join(' · ');
 }
 Pages.store = {
-  title: 'فروشگاه', state: { year: 0 },
+  title: 'فروشگاه', state: { year: 0, ty: {} },
   render(root) {
     const list = Store.data.store; if (!list) { root.innerHTML = noData('فروشگاه'); return; }
     const st = this.state, t = todayJ(), cw = weekKey(t[0] + '/' + p2(t[1]) + '/' + p2(t[2]));
@@ -252,7 +252,10 @@ Pages.store = {
       '<div class="card"><h2>فروش ماهانه فروشگاه ' + fa(st.year) + '</h2><div class="month-grid">' + MONTHS.map((n, k) => '<div class="mcell" style="background:' + cols[k] + ';color:#0F172A"><b>' + n + '</b><div class="v">' + abbr(mTot[k]) + '</div><div class="s">' + fm(mMet[k], 1) + ' متر مربع</div></div>').join('') + '</div></div>' +
       '<div class="card"><h2>نمودار ماهانه (مبلغ و متر مربع)</h2>' + lineChart(mpts.slice(-24), [A, M], { slot: 74 }) + '</div>' +
       '<div class="card"><h2>نمودار هفتگی (مبلغ و متر مربع)</h2>' + lineChart(wpts.slice(-60), [A, M], { slot: 82 }) + '</div>' +
+      typesBoxHtml('tyBox', st.ty, 'فروش فروشگاه بر اساس نوع پارکت') +
       '<h2 style="margin:14px 4px 0;font-size:15px">فروش‌های ثبت‌شده</h2>' + list_h;
+    const tyRows = []; rows.forEach(r => { if (r.s.tab && r.s.tab !== 'parquet') return; storeItems(r.s).forEach(it => tyRows.push({ d: r.ds, code: it.code, n: it.name || it.type || '', a: amount(it.cost), m: num(it.qty2), q: num(it.qty1) })); });
+    typesFill(root, 'tyBox', st.ty, tyRows, true);
     root.querySelectorAll('[data-y]').forEach(b => b.onclick = () => { st.year = +b.dataset.y; this.render(root); });
     scrollChartsToEnd(root);
   }

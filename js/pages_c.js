@@ -13,7 +13,7 @@ function buyersTable(list) {
   return '<table class="tbl"><tr><th>#</th><th>خریدار</th><th>مبلغ</th><th>متر مربع</th></tr>' + list.map((b, i) => '<tr><td>' + fa(i + 1) + '</td><td class="r">' + esc(b.c) + '</td><td class="n">' + fmt(b.a) + '</td><td class="n">' + fm(b.m, 1) + '</td></tr>').join('') + '</table>';
 }
 Pages.parquet = {
-  title: 'آمار فروش پارکت', state: { tab: 'sum', year: 0, q: '', top: 'week' },
+  title: 'آمار فروش پارکت', state: { tab: 'sum', year: 0, q: '', top: 'week', ty: {} },
   render(root) {
     const P = Store.data.parquet_sales; if (!P) { root.innerHTML = snapMissing('parquet_sales'); return; }
     const st = this.state, all = parquetRows(P), t = todayJ(), ts = t[0] + '/' + p2(t[1]) + '/' + p2(t[2]), cwk = weekKey(ts);
@@ -31,7 +31,7 @@ Pages.parquet = {
       const mk = Object.keys(mon).sort(), pts = []; if (mk.length) { let y = +mk[0].slice(0, 4), m = +mk[0].slice(5); const e = mk[mk.length - 1]; while (y + '/' + p2(m) <= e) { const v = mon[y + '/' + p2(m)] || [0, 0]; pts.push({ label: MONTHS[m - 1], sub: fa(y), amt: v[0] / 1e9, met: v[1] }); if (++m > 12) { m = 1; y++; } } }
       const wk = {}; all.forEach(r => { if (r.wk) { const k2 = r.wk[0] * 100 + r.wk[1]; (wk[k2] = wk[k2] || [0, 0]); wk[k2][0] += r.a; wk[k2][1] += r.m; } });
       const wks = Object.keys(wk).map(Number).sort((a, b) => a - b), wp = []; if (wks.length) { let y = Math.floor(wks[0] / 100), w = wks[0] % 100; const e = wks[wks.length - 1]; while (y * 100 + w <= e) { const v = wk[y * 100 + w] || [0, 0]; wp.push({ label: 'هفته ' + fa(w + 1), sub: weekShort(y, w), amt: v[0] / 1e9, met: v[1] }); if (++w > 52) { w = 0; y++; } } }
-      h += '<div class="card" style="margin-top:12px"><h2>نمودار ماهانه</h2>' + lineChart(pts.slice(-24), [A, M], { slot: 74 }) + '</div><div class="card"><h2>نمودار هفتگی</h2>' + lineChart(wp.slice(-60), [A, M], { slot: 82 }) + '</div>';
+      h += '<div class="card" style="margin-top:12px"><h2>نمودار ماهانه</h2>' + lineChart(pts.slice(-24), [A, M], { slot: 74 }) + '</div><div class="card"><h2>نمودار هفتگی</h2>' + lineChart(wp.slice(-60), [A, M], { slot: 82 }) + '</div>' + typesBoxHtml('tyBox', st.ty, 'فروش بر اساس نوع پارکت');
     } else if (st.tab === 'months') {
       const cols = ['#E3F2FD', '#E8F5E9', '#FFF8E1', '#FCE4EC', '#EDE7F6', '#E0F7FA', '#FFF3E0', '#F1F8E9', '#E8EAF6', '#FBE9E7', '#E0F2F1', '#F3E5F5'];
       const yr = all.filter(r => r.d.slice(0, 4) === String(st.year));
@@ -45,11 +45,12 @@ Pages.parquet = {
       const sets = { week: wRows, month: mRows, year: yRows.length >= 1 ? yRows : all };
       h += '<div class="chips">' + [['week', 'هفته جاری'], ['month', 'ماه جاری'], ['year', 'سال جاری'], ['all', 'کل']].map(x => '<button class="chip' + (st.top === x[0] ? ' on' : '') + '" data-top="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>' + buyersTable(topBuyers(st.top === 'all' ? all : sets[st.top], 25));
     } else {
-      const m = {}; all.forEach(r => { if (!r.code) return; const o = m[r.code] || (m[r.code] = { code: r.code, a: 0, m: 0, names: {} }); o.a += r.a; o.m += r.m; o.names[r.n] = (o.names[r.n] || 0) + 1; });
+      const m = {}; all.forEach(r => { if (!r.code) return; const ck = codeKey(r.code, r.n) || r.code, o = m[ck] || (m[ck] = { code: ck, a: 0, m: 0, names: {} }); o.a += r.a; o.m += r.m; const nm = codeName(r.code, r.n); o.names[nm] = (o.names[nm] || 0) + 1; });
       const q = customerKey(st.q), list = Object.values(m).sort((a, b) => b.a - a.a).filter(x => !q || x.code.includes(q) || customerKey(Object.keys(x.names).join(' ')).includes(q));
       h += searchBox('جستجوی کد یا نام کالا…', st.q) + '<div id="codes">' + list.slice(0, 150).map((x, i) => { const nm = Object.entries(x.names).sort((a, b) => b[1] - a[1])[0][0]; return '<div class="item"><div class="row between"><span class="t">' + fa(en(x.code)) + '</span><span class="amt">' + fmt(x.a) + '</span></div><div class="row between m"><span class="grow">' + esc(nm) + '</span><span>' + fm(x.m, 1) + ' متر مربع</span></div></div>'; }).join('') + '</div>';
     }
     root.innerHTML = h;
+    if (st.tab === 'sum') typesFill(root, 'tyBox', st.ty, all.map(r => ({ d: r.d, code: r.code, n: r.n, a: r.a, m: r.m })), false);
     root.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { st.tab = b.dataset.t; this.render(root); });
     root.querySelectorAll('[data-y]').forEach(b => b.onclick = () => { st.year = +b.dataset.y; this.render(root); });
     root.querySelectorAll('[data-top]').forEach(b => b.onclick = () => { st.top = b.dataset.top; this.render(root); });
