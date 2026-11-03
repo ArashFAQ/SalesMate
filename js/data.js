@@ -143,7 +143,7 @@ function parquetType(code, name) {
 }
 function codeKey(code, name) {
   const c = en(String(code || '')).trim();
-  if (parquetType(c, name) === 'جناغی') { const m = c.match(/^\s*(\d+)/) || en(String(name || '')).match(/(\d{3,})/); if (m) return m[1]; }
+  if (parquetType(c, name) === 'جناغی') { const nm = en(String(name || '')); const m = nm.match(/(\d{4})\s*[ABab]?\s*$/) || nm.match(/(\d{4})(?!.*\d{4})/) || c.match(/^\s*(\d{1,5})(?!\d)/); if (m) return m[1]; }
   return c;
 }
 function codeName(code, name) {
