@@ -187,13 +187,13 @@ function invItemHtml(i) {
   let dif = '', chip;
   if (net === 0) {
     // مانده‌ی کل مشتری صفر: «تسویه»؛ اختلاف همین حواله در پرانتز کنار مبلغ
-    if (b > 0) dif = '<span class="dif neg" dir="ltr">(−' + fmt(b) + ')</span> ';
-    else if (b < 0) dif = '<span class="dif pos" dir="ltr">(+' + fmt(-b) + ')</span> ';
-    chip = '<span class="pb ok">تسویه</span>';
+    if (b > 0) dif = '<b class="neg" dir="ltr">(−' + fmt(b) + ')</b>';
+    else if (b < 0) dif = '<b class="pos" dir="ltr">(+' + fmt(-b) + ')</b>';
+    chip = '<span class="pb ok">تسویه ✓</span>';
   } else {
-    chip = b > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(b) + '</span>' : b < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-b) + '</span>' : '<span class="pb ok">تسویه</span>';
+    chip = b > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(b) + '</span>' : b < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-b) + '</span>' : '<span class="pb ok">تسویه ✓</span>';
   }
-  return '<div class="item cc" style="background:' + customerColor(i.customer) + '" data-inv="' + i.id + '"><div class="row between"><span class="t">' + esc(i.customer) + '</span><span class="amt">' + dif + fmt(i.total) + '</span></div>' +
+  return '<div class="item cc" style="background:' + customerColor(i.customer) + '" data-inv="' + i.id + '"><div class="row between"><span class="t">' + esc(i.customer) + '</span><span class="amt"><span class="dif' + (dif ? '' : ' none') + '">' + dif + '</span>' + fmt(i.total) + '</span></div>' +
     '<div class="row between m"><span>شماره ' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + '</span>' + chip + '</div></div>';
 }
 function showInvoice(id) {
