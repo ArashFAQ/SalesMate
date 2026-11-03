@@ -82,3 +82,4 @@ body.kb .app{padding-bottom:40vh}
 .item.cc{color:#0F172A;border-color:rgba(0,0,0,.08);border-radius:22px}.item.cc .m,.item.cc .muted{color:#334155}.item.cc .amt{color:#0F172A}.item.cc .debt{color:#991B1B}.item.cc .cred{color:#065F46}
 .item.cc .debt,.item.cc .cred{color:#0F172A;font-weight:800}
 .pb{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:800;font-size:12px;color:#fff}.pb.red{background:#B91C1C}.pb.green{background:#047857}.pb.ok{background:#475569}
+.dif{font-size:12px;font-weight:800;margin-inline-start:4px}.dif.neg{color:#DC2626}.dif.pos{color:#059669}

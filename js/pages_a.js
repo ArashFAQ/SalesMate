@@ -173,11 +173,28 @@ function showStatement(name) {
 }
 
 /* ── حواله‌ها ── */
+let _netCache = null;
+function custNet(name) {
+  const inv = Store.data.invoices, bal = Store.data.balances;
+  if (!_netCache || _netCache.inv !== inv || _netCache.bal !== bal || _netCache.n !== (inv || []).length) {
+    const m = {}; customerSummaries().forEach(c => { m[c.name] = c.bal; });
+    _netCache = { inv, bal, n: (inv || []).length, m };
+  }
+  return _netCache.m[name || '—'] || 0;
+}
 function invItemHtml(i) {
-  const b = invBalance(i);
-  return '<div class="item cc" style="background:' + customerColor(i.customer) + '" data-inv="' + i.id + '"><div class="row between"><span class="t">' + esc(i.customer) + '</span><span class="amt">' + fmt(i.total) + '</span></div>' +
-    '<div class="row between m"><span>شماره ' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + '</span>' +
-    (b > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(b) + '</span>' : b < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-b) + '</span>' : '<span class="pb ok">تسویه</span>') + '</div></div>';
+  const b = invBalance(i), net = custNet(i.customer);
+  let dif = '', chip;
+  if (net === 0) {
+    // مانده‌ی کل مشتری صفر: «تسویه»؛ اختلاف همین حواله در پرانتز کنار مبلغ
+    if (b > 0) dif = '<span class="dif neg" dir="ltr">(−' + fmt(b) + ')</span> ';
+    else if (b < 0) dif = '<span class="dif pos" dir="ltr">(+' + fmt(-b) + ')</span> ';
+    chip = '<span class="pb ok">تسویه</span>';
+  } else {
+    chip = b > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(b) + '</span>' : b < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-b) + '</span>' : '<span class="pb ok">تسویه</span>';
+  }
+  return '<div class="item cc" style="background:' + customerColor(i.customer) + '" data-inv="' + i.id + '"><div class="row between"><span class="t">' + esc(i.customer) + '</span><span class="amt">' + dif + fmt(i.total) + '</span></div>' +
+    '<div class="row between m"><span>شماره ' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + '</span>' + chip + '</div></div>';
 }
 function showInvoice(id) {
   const i = (Store.data.invoices || []).find(x => x.id === id); if (!i) return;
