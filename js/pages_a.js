@@ -104,10 +104,17 @@ Pages.home = {
 };
 
 /* ── صورت‌حساب بدهکاری/طلبکاری مشتری (هم‌قالب استعلام) ── */
+function stmItems(i) {                         // اقلام حواله برای زیرردیف (پارکت: کارتن/متر مربع ، ام دی اف: پالت/ورق)
+  const d = itemsOf(i); if (!d || !(d.rows || []).length) return [];
+  const mdf = (d.tab || 'parquet') !== 'parquet', u1 = mdf ? 'پالت' : 'کارتن', u2 = mdf ? 'ورق' : 'متر مربع';
+  return d.rows.map(r => { r = r || {}; const p = [String(r.name || r.type || '—') + (r.grade ? ' (' + r.grade + ')' : '')], q1 = qtyInt(r.qty1), q2 = +en(r.qty2 || 0) || 0;
+    if (q1) p.push(fa(q1) + ' ' + u1); if (q2) p.push(fa(String(Math.round(q2 * 10000) / 10000).replace('.', '٫')) + ' ' + u2);
+    if (amount(r.price)) p.push('قیمت واحد ' + fmt(r.price)); if (amount(r.cost)) p.push('مبلغ ' + fmt(r.cost)); return p.join('  ·  '); });
+}
 function stmCompute(name) {
   const invs = (Store.data.invoices || []).filter(i => i.customer === name), adjR = (Store.data.balances || []).find(b => b.customer === name), adj = adjR ? amount(adjR.adjustment) : 0;
   const debts = []; let credit = 0;
-  invs.forEach(i => { const b = invBalance(i); if (b > 0) debts.push({ no: en(i.invoice_no || ''), date: en(i.date || ''), total: amount(i.total), paid: amount(i.total) - b, rem: b }); else if (b < 0) credit += -b; });
+  invs.forEach(i => { const b = invBalance(i); if (b > 0) debts.push({ no: en(i.invoice_no || ''), date: en(i.date || ''), total: amount(i.total), paid: amount(i.total) - b, rem: b, items: stmItems(i) }); else if (b < 0) credit += -b; });
   const extra = adj > 0 ? adj : 0; if (adj < 0) credit += -adj;
   debts.sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no));
   return { debts, credit, extra, balance: debts.reduce((x, d) => x + d.rem, 0) + extra - credit };
@@ -115,8 +122,11 @@ function stmCompute(name) {
 function stmCanvas(name, st) {
   const W = 800, S = 3, font = 'Vazirmatn, Tahoma, sans-serif', BLUE = '#1565C0', RED = '#DC2626', cred = st.balance < 0;
   const sums = []; if (!cred) { if (st.debts.length) sums.push(['جمع حواله‌های تسویه‌نشده', fmt(st.debts.reduce((a, d) => a + d.rem, 0)), '#0F172A']); if (st.extra) sums.push(['تعدیل / بدهی پیشین', fmt(st.extra), '#0F172A']); if (st.credit) sums.push(['طلبکاری (کسر از جمع)', '−' + fmt(st.credit), '#059669']); }
+  const mc = document.createElement('canvas').getContext('2d'); mc.font = '400 10.5px ' + font;
+  const subs = cred ? [] : st.debts.map(d => { const out = []; (d.items || []).forEach(t => wrapLines(mc, t, W - 36).forEach(l => out.push(l))); return out; }), SL = 16;
+  const subH = subs.reduce((a, l) => a + (l.length ? l.length * SL + 8 : 0), 0);
   const n = cred ? 0 : st.debts.length, RH = 40, wordsTxt = numberToWords(Math.abs(st.balance)) + ' ریال';
-  const H = 70 + 12 + 78 + 12 + (cred ? 0 : 34 + n * RH + 14) + sums.length * 30 + (sums.length ? 14 : 0) + 120 + 16;
+  const H = 70 + 12 + 78 + 12 + (cred ? 0 : 34 + n * RH + subH + 14) + sums.length * 30 + (sums.length ? 14 : 0) + 120 + 16;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S; const c = cv.getContext('2d'); c.scale(S, S); c.direction = 'rtl'; c.textBaseline = 'middle';
   const rr = (x, y, w, h, r, f, st2) => { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); if (f) { c.fillStyle = f; c.fill(); } if (st2) { c.strokeStyle = st2; c.lineWidth = 1.5; c.stroke(); } };
   const tx = (t, x, y, al, f, col) => { c.textAlign = al; c.font = f; c.fillStyle = col; c.fillText(t, x, y); };
@@ -129,7 +139,8 @@ function stmCanvas(name, st) {
   if (!cred) {
     const fr = [0.06, 0.14, 0.16, 0.22, 0.21, 0.21], cx = []; let acc = W; fr.forEach(f => { const w = f * W; cx.push(acc - w / 2); acc -= w; });
     rr(0, y, W, 34, 0, BLUE); ['ردیف', 'شماره حواله', 'تاریخ', 'مبلغ حواله (ریال)', 'پرداخت‌شده (ریال)', 'مانده (ریال)'].forEach((h, j) => tx(h, cx[j], y + 17, 'center', '700 11px ' + font, '#fff')); y += 34;
-    st.debts.forEach((d, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, RH); [fa(i + 1), fa(d.no), fa(d.date), fmt(d.total), fmt(d.paid)].forEach((v, j) => tx(v, cx[j], y + RH / 2, 'center', '500 13px ' + font, '#0F172A')); tx(fmt(d.rem), cx[5], y + RH / 2, 'center', '800 14px ' + font, RED); c.fillStyle = '#e0f2fe'; c.fillRect(0, y + RH - 1, W, 1); y += RH; });
+    st.debts.forEach((d, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, RH); [fa(i + 1), fa(d.no), fa(d.date), fmt(d.total), fmt(d.paid)].forEach((v, j) => tx(v, cx[j], y + RH / 2, 'center', '500 13px ' + font, '#0F172A')); tx(fmt(d.rem), cx[5], y + RH / 2, 'center', '800 14px ' + font, RED); c.fillStyle = '#e0f2fe'; c.fillRect(0, y + RH - 1, W, 1); y += RH;
+      const L = subs[i]; if (L.length) { const h = L.length * SL + 8; c.fillStyle = '#f8fafc'; c.fillRect(0, y, W, h); L.forEach((l, k) => tx(l, W - 18, y + 4 + SL * k + SL / 2, 'right', '400 10.5px ' + font, '#64748b')); c.fillStyle = '#e0f2fe'; c.fillRect(0, y + h - 1, W, 1); y += h; } });
     y += 14;
   }
   sums.forEach((r, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, 30); tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#64748b'); tx(r[1], 14, y + 15, 'left', '800 15px ' + font, r[2]); y += 30; });
