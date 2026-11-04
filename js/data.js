@@ -86,7 +86,7 @@ function customerSummaries() {
 }
 function storeItems(s) {
   let it = s.items_json; if (typeof it === 'string') { try { it = JSON.parse(it); } catch (e) { it = []; } }
-  return Array.isArray(it) ? it.filter(x => x && typeof x === 'object') : [];
+  return Array.isArray(it) ? sampleLast(it.filter(x => x && typeof x === 'object')) : [];
 }
 function storeMeters(s) { return (s.tab && s.tab !== 'parquet') ? 0 : storeItems(s).reduce((a, r) => a + num(r.qty2), 0); }
 function storeSheets(s) { return (s.tab && s.tab !== 'parquet') ? storeItems(s).reduce((a, r) => a + num(r.qty2), 0) : 0; }
