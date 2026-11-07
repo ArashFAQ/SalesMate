@@ -1,0 +1,55 @@
+name: Build APK
+on:
+  push:
+    branches: [apk]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Web app (latest main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: web
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Prepare www
+        run: |
+          mkdir -p www
+          cp -a web/. www/
+          rm -rf www/.git www/.github www/SUPABASE_MOBILE.sql www/README.md
+          grep -m1 APP_VERSION www/js/core.js || true
+      - run: npm install
+      - run: npx cap add android
+      - name: Icons
+        run: npx @capacitor/assets generate --android
+      - run: npx cap sync android
+      - name: Stable signing key (so updates install over the old app)
+        run: |
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
+      - name: Build
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk SalesMate.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SalesMate-apk
+          path: SalesMate.apk
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest SalesMate.apk --title "SalesMate APK" \
+            --notes "آخرین نسخه‌ی APK از وب‌اپ SalesMate (ساخته‌شده از شاخه main)."

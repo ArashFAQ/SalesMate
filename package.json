@@ -1,0 +1,16 @@
+{
+  "name": "salesmate-android",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SalesMate Android wrapper (Capacitor) around the SalesMate mobile web app",
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/filesystem": "^6.0.1",
+    "@capacitor/share": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.1.2"
+  }
+}
