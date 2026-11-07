@@ -27,11 +27,12 @@ Pages.parquet = {
     if (st.tab === 'sum') {
       const k = [['b-blue', 'فروش هفته', sum(wRows)], ['b-green', 'فروش ماه', sum(mRows)], ['b-violet', 'فروش سال', sum(yRows)], ['b-amber', 'کل داده', sum(all)]];
       h += '<div class="grid2">' + k.map(x => kpi(x[0], x[1], fmt(x[2].a), fm(x[2].m, 1) + ' متر مربع')).join('') + '</div>';
-      const mon = {}; all.forEach(r => { const k2 = r.d.slice(0, 7); if (k2.length === 7) { (mon[k2] = mon[k2] || [0, 0]); mon[k2][0] += r.a; mon[k2][1] += r.m; } });
-      const mk = Object.keys(mon).sort(), pts = []; if (mk.length) { let y = +mk[0].slice(0, 4), m = +mk[0].slice(5); const e = mk[mk.length - 1]; while (y + '/' + p2(m) <= e) { const v = mon[y + '/' + p2(m)] || [0, 0]; pts.push({ label: MONTHS[m - 1], sub: fa(y), amt: v[0] / 1e9, met: v[1] }); if (++m > 12) { m = 1; y++; } } }
-      const wk = {}; all.forEach(r => { if (r.wk) { const k2 = r.wk[0] * 100 + r.wk[1]; (wk[k2] = wk[k2] || [0, 0]); wk[k2][0] += r.a; wk[k2][1] += r.m; } });
-      const wks = Object.keys(wk).map(Number).sort((a, b) => a - b), wp = []; if (wks.length) { let y = Math.floor(wks[0] / 100), w = wks[0] % 100; const e = wks[wks.length - 1]; while (y * 100 + w <= e) { const v = wk[y * 100 + w] || [0, 0]; wp.push({ label: 'هفته ' + fa(w + 1), sub: weekShort(y, w), amt: v[0] / 1e9, met: v[1] }); if (++w > 52) { w = 0; y++; } } }
-      h += '<div class="card" style="margin-top:12px"><h2>نمودار ماهانه</h2>' + lineChart(pts.slice(-24), [A, M], { slot: 74 }) + '</div><div class="card"><h2>نمودار هفتگی</h2>' + lineChart(wp.slice(-60), [A, M], { slot: 82 }) + '</div>' + typesBoxHtml('tyBox', st.ty, 'فروش بر اساس نوع پارکت');
+      const isSt = r => r.c === 'فروشگاه ایزوفام';
+      const mon = {}; all.forEach(r => { const k2 = r.d.slice(0, 7); if (k2.length === 7) { const o = (mon[k2] = mon[k2] || [0, 0, 0, 0]); o[0] += r.a; o[1] += r.m; if (isSt(r)) { o[2] += r.a; o[3] += r.m; } } });
+      const mk = Object.keys(mon).sort(), pts = []; if (mk.length) { let y = +mk[0].slice(0, 4), m = +mk[0].slice(5); const e = mk[mk.length - 1]; while (y + '/' + p2(m) <= e) { const v = mon[y + '/' + p2(m)] || [0, 0, 0, 0]; pts.push({ label: MONTHS[m - 1], sub: fa(y), t: [v[0] / 1e9, v[1]], s: [v[2] / 1e9, v[3]], c: [(v[0] - v[2]) / 1e9, v[1] - v[3]] }); if (++m > 12) { m = 1; y++; } } }
+      const wk = {}; all.forEach(r => { if (r.wk) { const k2 = r.wk[0] * 100 + r.wk[1]; const o = (wk[k2] = wk[k2] || [0, 0, 0, 0]); o[0] += r.a; o[1] += r.m; if (isSt(r)) { o[2] += r.a; o[3] += r.m; } } });
+      const wks = Object.keys(wk).map(Number).sort((a, b) => a - b), wp = []; if (wks.length) { let y = Math.floor(wks[0] / 100), w = wks[0] % 100; const e = wks[wks.length - 1]; while (y * 100 + w <= e) { const v = wk[y * 100 + w] || [0, 0, 0, 0]; wp.push({ label: 'هفته ' + fa(w + 1), sub: weekShort(y, w), t: [v[0] / 1e9, v[1]], s: [v[2] / 1e9, v[3]], c: [(v[0] - v[2]) / 1e9, v[1] - v[3]] }); if (++w > 52) { w = 0; y++; } } }
+      h += '<div class="card" style="margin-top:12px"><h2>نمودار ماهانه — کل / فروشگاه / شرکت</h2>' + lineChart3(pts.slice(-24), { slot: 84 }) + '</div><div class="card"><h2>نمودار هفتگی — کل / فروشگاه / شرکت</h2>' + lineChart3(wp.slice(-60), { slot: 84 }) + '</div>' + typesBoxHtml('tyBox', st.ty, 'فروش بر اساس نوع پارکت');
     } else if (st.tab === 'months') {
       const cols = ['#E3F2FD', '#E8F5E9', '#FFF8E1', '#FCE4EC', '#EDE7F6', '#E0F7FA', '#FFF3E0', '#F1F8E9', '#E8EAF6', '#FBE9E7', '#E0F2F1', '#F3E5F5'];
       const yr = all.filter(r => r.d.slice(0, 4) === String(st.year));
