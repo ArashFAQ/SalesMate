@@ -63,13 +63,39 @@ function transitFor(name) {
   return _trMap[customerKey(name)] || [];
 }
 function transitSum(rows) { return rows.reduce((s, r) => s + amount(r[1]), 0); }
+function transitCanvas(name, rows) {
+  const W = 800, S = 3, font = 'Vazirmatn, Tahoma, sans-serif', BLUE = '#1565C0', AMB = '#B45309', RH = 38, n = rows.length;
+  const H = 70 + 12 + 70 + 12 + 34 + n * RH + 56 + 16;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S; const c = cv.getContext('2d'); c.scale(S, S); c.direction = 'rtl'; c.textBaseline = 'middle';
+  const rr = (x, y, w, h, r, f) => { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); c.fillStyle = f; c.fill(); };
+  const tx = (t, x, y, al, f, col) => { c.textAlign = al; c.font = f; c.fillStyle = col; c.fillText(t, x, y); };
+  c.fillStyle = '#fff'; c.fillRect(0, 0, W, H);
+  rr(0, 0, W, 70, [14, 14, 0, 0], BLUE); tx('چک‌های در راه', W - 18, 26, 'right', '800 18px ' + font, '#fff'); tx('SalesMate', W - 18, 52, 'right', '500 12px ' + font, 'rgba(255,255,255,.9)');
+  let y = 82; const bw = (W - 10) / 1.7;
+  rr(W - bw, y, bw, 70, 12, BLUE); tx('نام مشتری', W - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); tx(name, W - 16, y + 44, 'right', '800 16px ' + font, '#fff');
+  const dw = bw * 0.7; rr(0, y, dw, 70, 12, BLUE); tx('تاریخ گزارش', dw - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); const t = todayJ(); tx(fa(jfmt(t[0], t[1], t[2])), dw - 16, y + 44, 'right', '800 16px ' + font, '#fff');
+  y += 70 + 12;
+  const fr = [0.10, 0.25, 0.30, 0.35], cx = []; let acc = W; fr.forEach(f => { const w = f * W; cx.push(acc - w / 2); acc -= w; });
+  rr(0, y, W, 34, 0, BLUE); ['ردیف', 'تاریخ چک', 'شماره چک', 'مبلغ (ریال)'].forEach((h, j) => tx(h, cx[j], y + 17, 'center', '700 12px ' + font, '#fff')); y += 34;
+  rows.forEach((r, i) => { c.fillStyle = i % 2 ? '#fff' : '#f0f9ff'; c.fillRect(0, y, W, RH); [fa(i + 1), fa(r[0]), fa(r[2] || '—')].forEach((v, j) => tx(v, cx[j], y + RH / 2, 'center', '500 13px ' + font, '#0F172A')); tx(fmt(r[1]), cx[3], y + RH / 2, 'center', '800 14px ' + font, '#0F172A'); c.fillStyle = '#e0f2fe'; c.fillRect(0, y + RH - 1, W, 1); y += RH; });
+  y += 12; rr(0, y, W, 44, 12, '#FFF7ED'); tx('جمع کل چک‌های در راه', W - 18, y + 22, 'right', '700 14px ' + font, '#64748B'); tx(fmt(transitSum(rows)) + ' ریال', 18, y + 22, 'left', '900 18px ' + font, AMB);
+  return cv;
+}
 function showTransit(name) {
   const rows = transitFor(name);
+  const sorted = rows.slice().sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   openSheet('چک‌های در راه — ' + name,
-    '<div class="card"><div class="pill-row"><span>تعداد چک</span><b>' + fa(rows.length) + '</b></div>' +
-    '<table class="tbl" style="width:100%;text-align:center"><tr><th>تاریخ چک</th><th>مبلغ (ریال)</th></tr>' +
-    rows.map(r => '<tr><td>' + fa(r[0]) + '</td><td>' + fmt(r[1]) + '</td></tr>').join('') +
-    '<tr><td><b>جمع کل</b></td><td><b>' + fmt(transitSum(rows)) + '</b></td></tr></table></div>');
+    '<div class="card"><div class="pill-row"><span>تعداد چک</span><b>' + fa(sorted.length) + '</b></div>' +
+    '<table class="tbl"><tr><th>تاریخ چک</th><th>شماره چک</th><th>مبلغ (ریال)</th></tr>' +
+    sorted.map(r => '<tr><td>' + fa(r[0]) + '</td><td>' + fa(r[2] || '—') + '</td><td>' + fmt(r[1]) + '</td></tr>').join('') +
+    '<tr><td colspan="2"><b>جمع کل</b></td><td><b>' + fmt(transitSum(sorted)) + '</b></td></tr></table></div>' +
+    '<div class="grid2"><button class="btn block" id="trImg">🖼 ارسال تصویر</button><button class="btn block" id="trPdf">📄 ارسال PDF</button></div>',
+    body => {
+      const build = async () => { try { await document.fonts.ready; } catch (e) { } return transitCanvas(name, sorted); };
+      const txt = 'چک‌های در راه ' + name + ': ' + fmt(transitSum(sorted)) + ' ریال';
+      body.querySelector('#trImg').onclick = async () => shareCanvas(await build(), 'chek_' + name, 'png', txt);
+      body.querySelector('#trPdf').onclick = async () => shareCanvas(await build(), 'chek_' + name, 'pdf', txt);
+    });
 }
 
 /* ───────── مشتق‌ها ─────────
