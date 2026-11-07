@@ -111,7 +111,7 @@ function showTransit(name) {
     });
 }
 
-/* ───────── مشتق‌ها ─────────
+/* ───────── مشتق‌ها ───────── */
 function invBalance(inv) { const t = amount(inv.total), p = (inv.paid_amount == null || String(inv.paid_amount).trim() === '') ? t : amount(inv.paid_amount); return t - p; }
 function invMeters(inv) {                 // فقط پارکت: متر مربع
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') !== 'parquet') return 0;
