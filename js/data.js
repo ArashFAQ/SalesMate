@@ -1,6 +1,6 @@
 /* لایه‌ی داده: همه چیز فقط از ابر خوانده می‌شود و در IndexedDB کش می‌شود (آفلاین هم می‌توان دید) */
 'use strict';
-const OWNER_DS = ['store', 'calc', 'parquet_sales', 'free_items', 'balance', 'sales_report'];
+const OWNER_DS = ['store', 'calc', 'parquet_sales', 'free_items', 'balance', 'sales_report', 'cheques_transit'];
 const DS = {
   invoices: { path: u => '/rest/v1/invoices?user_id=eq.' + u + '&select=id,customer,invoice_no,date,time,total,paid_amount,created_at,inquiry_data&order=id.asc', user: true, label: 'حواله‌ها' },
   balances: { path: u => '/rest/v1/customer_balances?user_id=eq.' + u + '&select=customer,adjustment', user: true, label: 'مانده‌ها' },
@@ -12,7 +12,8 @@ const DS = {
   parquet_sales: { snap: true, label: 'آمار پارکت' },
   free_items: { snap: true, label: 'سمپل و استند' },
   balance: { snap: true, label: 'بالانس موجودی' },
-  sales_report: { snap: true, label: 'تحلیل فروش' }
+  sales_report: { snap: true, label: 'تحلیل فروش' },
+  cheques_transit: { snap: true, label: 'چک‌های در راه' }
 };
 const Store = { data: {}, at: {}, err: {}, busy: false };
 
@@ -53,7 +54,25 @@ async function refreshAll(only) {
   return fails;
 }
 
-/* ───────── مشتق‌ها ───────── */
+/* چک‌های در راه (فقط مالک؛ فقط مشتری‌های خود مالک — از اسنپ‌شات ابری) */
+let _trMap = null, _trSrc = null;
+function transitFor(name) {
+  const d = Store.data.cheques_transit;
+  if (!d || !d.customers || !isOwner()) return [];
+  if (_trSrc !== d) { _trSrc = d; _trMap = {}; Object.keys(d.customers).forEach(n => { _trMap[customerKey(n)] = d.customers[n]; }); }
+  return _trMap[customerKey(name)] || [];
+}
+function transitSum(rows) { return rows.reduce((s, r) => s + amount(r[1]), 0); }
+function showTransit(name) {
+  const rows = transitFor(name);
+  openSheet('چک‌های در راه — ' + name,
+    '<div class="card"><div class="pill-row"><span>تعداد چک</span><b>' + fa(rows.length) + '</b></div>' +
+    '<table class="tbl" style="width:100%;text-align:center"><tr><th>تاریخ چک</th><th>مبلغ (ریال)</th></tr>' +
+    rows.map(r => '<tr><td>' + fa(r[0]) + '</td><td>' + fmt(r[1]) + '</td></tr>').join('') +
+    '<tr><td><b>جمع کل</b></td><td><b>' + fmt(transitSum(rows)) + '</b></td></tr></table></div>');
+}
+
+/* ───────── مشتق‌ها ─────────
 function invBalance(inv) { const t = amount(inv.total), p = (inv.paid_amount == null || String(inv.paid_amount).trim() === '') ? t : amount(inv.paid_amount); return t - p; }
 function invMeters(inv) {                 // فقط پارکت: متر مربع
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') !== 'parquet') return 0;

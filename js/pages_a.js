@@ -245,7 +245,7 @@ Pages.customers = {
       const q = customerKey(st.q);
       let rows = cs.filter(c => (!q || customerKey(c.name).includes(q)) && (st.f === 'all' || (st.f === 'deb' && c.bal > 0) || (st.f === 'cre' && c.bal < 0) || (st.f === 'year' && c.year > 0)));
       rows.sort((a, b) => st.f === 'deb' ? b.bal - a.bal : st.f === 'cre' ? a.bal - b.bal : b.total - a.total);
-      root.querySelector('#list').innerHTML = rows.slice(0, 250).map(c => '<div class="item cc" style="background:' + customerColor(c.name) + '" data-c="' + esc(c.name) + '"><div class="row between"><span class="t">' + esc(c.name) + '</span>' + (c.bal > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(c.bal) + '</span>' : c.bal < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-c.bal) + '</span>' : '<span class="pb ok">تسویه</span>') + '</div><div class="row between m"><span>' + fa(c.count) + ' حواله · آخرین ' + fa(c.last) + '</span><span>جمع ' + abbr(c.total) + '</span></div></div>').join('') || '<div class="empty">موردی نیست</div>';
+      root.querySelector('#list').innerHTML = rows.slice(0, 250).map(c => '<div class="item cc" style="background:' + customerColor(c.name) + '" data-c="' + esc(c.name) + '"><div class="row between"><span class="t">' + esc(c.name) + '</span>' + (c.bal > 0 ? '<span class="pb red">کمتر پرداخت · ' + fmt(c.bal) + '</span>' : c.bal < 0 ? '<span class="pb green">بیشتر پرداخت · ' + fmt(-c.bal) + '</span>' : '<span class="pb ok">تسویه</span>') + '</div><div class="row between m"><span>' + fa(c.count) + ' حواله · آخرین ' + fa(c.last) + '</span><span>جمع ' + abbr(c.total) + '</span></div>' + (transitFor(c.name).length ? '<div class="m" style="color:#b45309;font-weight:700">چک در راه · ' + fmt(transitSum(transitFor(c.name))) + ' (' + fa(transitFor(c.name).length) + ' چک)</div>' : '') + '</div>').join('') || '<div class="empty">موردی نیست</div>';
       root.querySelectorAll('[data-c]').forEach(el => el.onclick = () => showCustomer(el.dataset.c));
     };
     root.querySelector('#q').oninput = debounce(e => { st.q = e.target.value; draw(); }, 150);
@@ -262,9 +262,10 @@ function showCustomer(name) {
     '<div class="card"><div class="pill-row"><span>مانده</span><b class="' + (c.bal > 0 ? 'debt' : 'cred') + '">' + (c.bal > 0 ? 'بدهکار ' + fmt(c.bal) : c.bal < 0 ? 'طلبکار ' + fmt(-c.bal) : 'تسویه') + '</b></div><div class="pill-row"><span>تعداد حواله</span><b>' + fa(c.count) + '</b></div><div class="pill-row"><span>جمع خرید</span><b>' + fmt(c.total) + '</b></div>' +
     Object.keys(years).sort().reverse().map(y => '<div class="pill-row"><span>سال ' + fa(y) + '</span><b>' + fmt(years[y]) + '</b></div>').join('') + '</div>' +
     (ct && (ct.mobile || ct.phone) ? '<div class="card row between"><span>' + esc(ct.mobile || ct.phone) + '</span><a class="btn sm green" href="tel:' + esc(en(ct.mobile || ct.phone)) + '">تماس</a></div>' : '') +
+    (transitFor(name).length ? '<div class="card"><div class="pill-row"><span>چک در راه</span><b style="color:#b45309">' + fmt(transitSum(transitFor(name))) + ' (' + fa(transitFor(name).length) + ' چک)</b></div><button class="btn block" id="trBtn" style="margin-top:8px">🧾 چک‌های در راه</button></div>' : '') +
     (c.bal !== 0 ? '<button class="btn block" id="stmBtn" style="margin-bottom:10px">' + (c.bal > 0 ? '📄 صورت‌حساب بدهکاری' : '📄 اعلام طلبکاری') + '</button>' : '') +
     '<div class="card"><h2>حواله‌ها</h2>' + invs.slice(0, 60).map(invItemHtml).join('') + '</div>',
-    body => { body.querySelectorAll('[data-inv]').forEach(el => el.onclick = () => showInvoice(+el.dataset.inv)); const sb = body.querySelector('#stmBtn'); if (sb) sb.onclick = () => showStatement(name); });
+    body => { body.querySelectorAll('[data-inv]').forEach(el => el.onclick = () => showInvoice(+el.dataset.inv)); const sb = body.querySelector('#stmBtn'); if (sb) sb.onclick = () => showStatement(name); const tb = body.querySelector('#trBtn'); if (tb) tb.onclick = () => showTransit(name); });
 }
 
 /* ── اطلاعات مشتریان ── */
