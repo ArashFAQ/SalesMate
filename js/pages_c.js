@@ -151,10 +151,15 @@ Pages.settings = {
   title: 'تنظیمات',
   render(root) {
     const names = Object.keys(DS).filter(k => isOwner() || !OWNER_DS.includes(k));
-    root.innerHTML = '<div class="card"><h2>حساب</h2><div class="pill-row"><span>ایمیل</span><b class="ltr">' + esc(Auth.email() || '—') + '</b></div><div class="pill-row"><span>نسخه برنامه</span><b>' + fa(APP_VERSION) + ' (فقط‌خواندنی)</b></div><div class="grid2" style="margin-top:10px"><button class="btn" id="rf">⟳ به‌روزرسانی همه</button><button class="btn sec" id="lo">خروج</button></div></div>' +
+    const th = getTheme();
+    root.innerHTML = '<div class="card"><h2>ظاهر برنامه</h2><div class="grid3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">' +
+      [['auto', '🌓 خودکار'], ['light', '☀️ روشن'], ['dark', '🌙 تاریک']].map(x => '<button class="btn' + (th === x[0] ? '' : ' sec') + '" data-theme-set="' + x[0] + '">' + x[1] + '</button>').join('') +
+      '</div><div class="muted" style="margin-top:6px;font-size:12px">«خودکار» از تم گوشی پیروی می‌کند.</div></div>' +
+      '<div class="card"><h2>حساب</h2><div class="pill-row"><span>ایمیل</span><b class="ltr">' + esc(Auth.email() || '—') + '</b></div><div class="pill-row"><span>نسخه برنامه</span><b>' + fa(APP_VERSION) + ' (فقط‌خواندنی)</b></div><div class="grid2" style="margin-top:10px"><button class="btn" id="rf">⟳ به‌روزرسانی همه</button><button class="btn sec" id="lo">خروج</button></div></div>' +
       '<div class="card"><h2>وضعیت داده‌ها</h2>' + names.map(k => { const n = Store.data[k] == null ? 0 : (Array.isArray(Store.data[k]) ? Store.data[k].length : (Store.data[k].rows ? Store.data[k].rows.length : (Store.data[k].results ? Store.data[k].results.length : 1))); return '<div class="pill-row"><span>' + esc(DS[k].label) + '</span><span>' + (Store.err[k] ? '<span class="tag red">خطا</span>' : Store.data[k] == null ? '<span class="tag amber">خالی</span>' : '<span class="tag green">' + fa(n) + '</span>') + ' <span class="muted">' + ago(Store.at[k]) + '</span></span></div>' + (Store.err[k] ? '<div class="err-t">' + esc(Store.err[k]) + '</div>' : ''); }).join('') + '</div>' +
       '<div class="card"><h2>راهنما</h2><div class="muted" style="line-height:1.9">• این برنامه فقط از ابر می‌خواند و هیچ چیزی در ابر نمی‌نویسد.<br>• داده‌ها آفلاین هم نمایش داده می‌شوند (آخرین نسخه‌ی دریافت‌شده).<br>• آمار پارکت، سمپل/استند و بالانس را برنامه‌ی ویندوز هنگام «ارسال به ابر» می‌فرستد.<br>• اگر آمار خالی بود: فایل <span class="ltr">SUPABASE_MOBILE.sql</span> را در Supabase اجرا و در ویندوز «ارسال به ابر» را بزنید.</div>' +
       '<button class="btn sec block" id="cc" style="margin-top:10px">پاک‌کردن کش گوشی</button></div>';
+    root.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => { setTheme(b.dataset.themeSet); this.render(root); });
     root.querySelector('#rf').onclick = async () => { const f = await refreshAll(); toast(f ? 'بعضی داده‌ها دریافت نشد' : 'به‌روزرسانی شد', !!f); this.render(root); };
     root.querySelector('#lo').onclick = async () => { if (!confirm('از حساب خارج می‌شوید؟')) return; Auth.logout(); await Cache.clear(); location.reload(); };
     root.querySelector('#cc').onclick = async () => { await Cache.clear(); Store.data = {}; toast('کش پاک شد؛ دوباره به‌روزرسانی کنید'); this.render(root); };

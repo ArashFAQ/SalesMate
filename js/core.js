@@ -1,7 +1,7 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
 function loginEmail(v) { v = String(v || '').trim(); return v && v.indexOf('@') < 0 ? v.toLowerCase() + '@sales.local' : v; }
-const APP_VERSION = '2.4.17';
+const APP_VERSION = '2.4.18';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -315,4 +315,12 @@ function isMdfRows(rows) {
   const names = (rows || []).map(r => String((r && (r.name || r.type)) || '')).join(' ').toLowerCase();
   if (!names || names.indexOf('پارکت') >= 0) return false;
   return ['ام دی اف', 'ام‌دی‌اف', 'mdf', 'هایگلاس', 'ملامینه', 'خام'].some(k => names.indexOf(k) >= 0);
+}
+
+
+/* ── تم: خودکار (مثل گوشی) / روشن / تاریک ── */
+function getTheme() { try { const t = localStorage.getItem('sm_theme'); return (t === 'dark' || t === 'light') ? t : 'auto'; } catch (e) { return 'auto'; } }
+function setTheme(t) {
+  try { if (t === 'dark' || t === 'light') localStorage.setItem('sm_theme', t); else localStorage.removeItem('sm_theme'); } catch (e) { }
+  if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
 }

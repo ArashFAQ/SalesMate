@@ -3,7 +3,9 @@
 @font-face{font-family:Vazirmatn;src:url(../fonts/Vazirmatn-Bold.ttf) format("truetype");font-weight:700}
 :root{--bg:#F1F5F9;--card:#fff;--text:#0F172A;--muted:#64748B;--line:#E2E8F0;--pri:#1565C0;--pri-d:#0D47A1;--pri-s:#E3F2FD;
 --green:#059669;--red:#DC2626;--amber:#D97706;--violet:#7C3AED;--sh:0 1px 3px rgba(15,23,42,.08);--nav:62px;--top:54px}
-@media (prefers-color-scheme:dark){:root{--bg:#0B1220;--card:#131C2E;--text:#E5EAF3;--muted:#94A3B8;--line:#24324A;--pri:#4A9BE8;--pri-d:#8CC3F5;--pri-s:#14304F;--sh:none}}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0B1220;--card:#131C2E;--text:#E5EAF3;--muted:#94A3B8;--line:#24324A;--pri:#4A9BE8;--pri-d:#8CC3F5;--pri-s:#14304F;--sh:none;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0B1220;--card:#131C2E;--text:#E5EAF3;--muted:#94A3B8;--line:#24324A;--pri:#4A9BE8;--pri-d:#8CC3F5;--pri-s:#14304F;--sh:none;color-scheme:dark}
+:root[data-theme=light]{color-scheme:light}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;min-height:100%}
 body{font-family:Vazirmatn,Tahoma,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.7;
