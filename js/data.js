@@ -13,7 +13,8 @@ const DS = {
   free_items: { snap: true, label: 'سمپل و استند' },
   balance: { snap: true, label: 'بالانس موجودی' },
   sales_report: { snap: true, label: 'تحلیل فروش' },
-  cheques_transit: { snap: true, label: 'چک‌های در راه' }
+  cheques_transit: { snap: true, label: 'چک‌های در راه' },
+  cw_cheques: { path: u => '/rest/v1/coworker_snapshots?assignee=eq.' + u + '&select=cheques', user: true, single: true, col: 'cheques', label: 'چک‌های در راه (همکار)' }
 };
 const Store = { data: {}, at: {}, err: {}, busy: false };
 
@@ -35,7 +36,7 @@ async function fetchOne(k) {
       if (d.user && (e.status === 400 || e.status === 404)) data = await sbAll(d.path(uid).replace(/user_id=eq\.[^&]+&?/, ''));   // جدول بدون ستون user_id
       else throw e;
     }
-    if (d.single) data = data && data[0] ? data[0].payload : null;
+    if (d.single) data = data && data[0] ? data[0][d.col || 'payload'] : null;
   }
   Store.data[k] = data; Store.at[k] = Date.now(); delete Store.err[k];
   await Cache.set('ds_' + k, { data: data, at: Store.at[k] });
@@ -57,9 +58,21 @@ async function refreshAll(only) {
 /* چک‌های در راه (فقط مالک؛ فقط مشتری‌های خود مالک — از اسنپ‌شات ابری) */
 let _trMap = null, _trSrc = null;
 function transitFor(name) {
-  const d = Store.data.cheques_transit;
-  if (!d || !d.customers || !isOwner()) return [];
-  if (_trSrc !== d) { _trSrc = d; _trMap = {}; Object.keys(d.customers).forEach(n => { _trMap[customerKey(n)] = d.customers[n]; }); }
+  // مالک: اسنپ‌شات مشتری‌های خودش؛ همکار: ردیف خودش در coworker_snapshots (فقط مشتری‌های واگذارشده)
+  const d = isOwner() ? Store.data.cheques_transit : Store.data.cw_cheques;
+  if (!d || !d.customers) return [];
+  if (_trSrc !== d) {
+    _trSrc = d; _trMap = {};
+    const t = todayJ(), td = new Date(Date.UTC(...j2g(t[0], t[1], t[2]).slice(0, 3).map((v, i) => i === 1 ? v - 1 : v)));
+    Object.keys(d.customers).forEach(n => {
+      const rows = d.customers[n].filter(r => {                      // اسنپ‌شات ممکن است تا یک روز قدیمی باشد: قانون ۲ هفته دوباره اعمال شود
+        const q = en(String(r[0])).split('/').map(Number); if (q.length < 3 || !q[0]) return false;
+        const g = j2g(q[0], q[1], q[2]), dd = new Date(Date.UTC(g[0], g[1] - 1, g[2]));
+        return (dd - td) / 864e5 >= -14;
+      });
+      if (rows.length) _trMap[customerKey(n)] = rows;
+    });
+  }
   return _trMap[customerKey(name)] || [];
 }
 function transitSum(rows) { return rows.reduce((s, r) => s + amount(r[1]), 0); }
