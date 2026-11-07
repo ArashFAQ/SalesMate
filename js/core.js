@@ -1,7 +1,7 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
 function loginEmail(v) { v = String(v || '').trim(); return v && v.indexOf('@') < 0 ? v.toLowerCase() + '@sales.local' : v; }
-const APP_VERSION = '2.4.16';
+const APP_VERSION = '2.4.17';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -280,7 +280,18 @@ async function shareText(text, title) {
   } catch (e) { if (e && e.name === 'AbortError') return false; }
   try { await navigator.clipboard.writeText(text); toast('متن کپی شد'); return true; } catch (e) { toast('اشتراک‌گذاری ممکن نشد', true); return false; }
 }
+async function shareBlobNative(blob, name, text) {      // داخل APK (Capacitor): ذخیره در کش + اشتراک‌گذاری
+  try {
+    const C = window.Capacitor; if (!C || !(C.isNativePlatform && C.isNativePlatform())) return null;
+    const P = C.Plugins || {}; if (!P.Filesystem || !P.Share) return null;
+    const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+    const w = await P.Filesystem.writeFile({ path: name, data: b64, directory: 'CACHE' });
+    await P.Share.share({ title: name, text: text || '', files: [w.uri], dialogTitle: 'ارسال' });
+    return true;
+  } catch (e) { return (e && /cancel/i.test(String(e.message || e))) ? false : null; }
+}
 async function shareBlob(blob, name, text) {
+  const nat = await shareBlobNative(blob, name, text); if (nat !== null) return nat;
   const file = new File([blob], name, { type: blob.type });
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: text || '' }); return true; }
