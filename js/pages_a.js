@@ -112,9 +112,9 @@ function stmItems(i) {                         // اقلام حواله برای
 }
 function stmCompute(name) {
   const invs = (Store.data.invoices || []).filter(i => i.customer === name), adjR = (Store.data.balances || []).find(b => b.customer === name), adj = adjR ? amount(adjR.adjustment) : 0;
-  const debts = []; let credit = 0;
-  invs.forEach(i => { const b = invBalance(i); if (b > 0) debts.push({ no: en(i.invoice_no || ''), date: en(i.date || ''), total: amount(i.total), paid: amount(i.total) - b, rem: b, items: stmItems(i) }); else if (b < 0) credit += -b; });
-  const extra = adj > 0 ? adj : 0; if (adj < 0) credit += -adj;
+  const debts = [], F = fifoFor(name); let credit = F.net < 0 ? -F.net : 0;
+  invs.forEach(i => { const b = F.alloc[i.id] || 0; if (b > 0) debts.push({ no: en(i.invoice_no || ''), date: en(i.date || ''), total: amount(i.total), paid: amount(i.total) - b, rem: b, items: stmItems(i) }); });
+  const extra = F.left > 0 ? F.left : 0;
   debts.sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no));
   return { debts, credit, extra, balance: debts.reduce((x, d) => x + d.rem, 0) + extra - credit };
 }
@@ -185,7 +185,10 @@ function custNet(name) {
 function invItemHtml(i) {
   const b = invBalance(i), net = custNet(i.customer);
   let dif = '', chip;
-  if (net === 0) {
+  if (net > 0) {
+    const sb = invShownBalance(i);
+    chip = sb > 0 ? '<span class="pb red">مانده · ' + fmt(sb) + '</span>' : '<span class="pb ok">تسویه ✓</span>';
+  } else if (net === 0) {
     // مانده‌ی کل مشتری صفر: «تسویه»؛ اختلاف همین حواله در پرانتز کنار مبلغ
     if (b > 0) dif = '<b class="neg" dir="ltr">(−' + fmt(b) + ')</b>';
     else if (b < 0) dif = '<b class="pos" dir="ltr">(+' + fmt(-b) + ')</b>';
@@ -198,7 +201,7 @@ function invItemHtml(i) {
 }
 function showInvoice(id) {
   const i = (Store.data.invoices || []).find(x => x.id === id); if (!i) return;
-  const d = itemsOf(i), b = invBalance(i);
+  const d = itemsOf(i), b = invShownBalance(i);
   let html = '<div class="card"><div class="pill-row"><span>مشتری</span><b>' + esc(i.customer) + '</b></div><div class="pill-row"><span>شماره / تاریخ</span><b>' + fa(en(i.invoice_no || '')) + ' · ' + fa(en(i.date || '')) + '</b></div>' +
     '<div class="pill-row"><span>مبلغ</span><b class="amt">' + fmt(i.total) + ' ریال</b></div><div class="pill-row"><span>پرداختی</span><b>' + fmt((i.paid_amount == null || String(i.paid_amount).trim() === '') ? i.total : i.paid_amount) + '</b></div>' +
     '<div class="pill-row"><span>مانده</span><b class="' + (b > 0 ? 'debt' : 'cred') + '">' + (b > 0 ? 'بدهکار ' + fmt(b) : b < 0 ? 'طلبکار ' + fmt(-b) : 'تسویه') + '</b></div>' +

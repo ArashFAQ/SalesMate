@@ -113,6 +113,25 @@ function showTransit(name) {
 
 /* ───────── مشتق‌ها ───────── */
 function invBalance(inv) { const t = amount(inv.total), p = (inv.paid_amount == null || String(inv.paid_amount).trim() === '') ? t : amount(inv.paid_amount); return t - p; }
+
+/* تخصیص بدهی به روش FIFO: پرداخت‌ها از قدیمی‌ترین حواله شروع می‌شوند؛ بدهی فعلی فقط روی جدیدترین حواله‌ها می‌نشیند.
+   خروجی: {alloc:{id:مانده}, net, left} — left = بخشی از بدهی (تعدیل) که به حواله‌ای نمی‌رسد. */
+let _fifoCache = null;
+function fifoFor(name) {
+  const inv = Store.data.invoices, bal = Store.data.balances, n = (inv || []).length;
+  if (!_fifoCache || _fifoCache.inv !== inv || _fifoCache.bal !== bal || _fifoCache.n !== n) _fifoCache = { inv, bal, n, m: {} };
+  if (_fifoCache.m[name]) return _fifoCache.m[name];
+  const invs = (inv || []).filter(i => i.customer === name), adjR = (bal || []).find(b => b.customer === name);
+  let net = adjR ? amount(adjR.adjustment) : 0;
+  invs.forEach(i => { net += invBalance(i); });
+  const alloc = {}; let left = net > 0 ? net : 0;
+  invs.slice().sort((a, b) => (en(a.date || '') + '|' + (a.time || '') + '|' + String(parseInt(en(a.invoice_no || '').replace(/\D+/g, '').slice(-9) || 0)).padStart(9, '0') + '|' + String(a.id).padStart(9, '0'))
+    .localeCompare(en(b.date || '') + '|' + (b.time || '') + '|' + String(parseInt(en(b.invoice_no || '').replace(/\D+/g, '').slice(-9) || 0)).padStart(9, '0') + '|' + String(b.id).padStart(9, '0'))).reverse()
+    .forEach(i => { const t = amount(i.total); if (left > 0 && t > 0) { const x = Math.min(left, t); alloc[i.id] = x; left -= x; } });
+  return (_fifoCache.m[name] = { alloc, net, left });
+}
+/* مانده‌ی نمایشی یک حواله: اگر مشتری بدهکار است، سهم FIFO؛ وگرنه اختلاف خود حواله */
+function invShownBalance(inv) { const f = fifoFor(inv.customer); return f.net > 0 ? (f.alloc[inv.id] || 0) : invBalance(inv); }
 function invMeters(inv) {                 // فقط پارکت: متر مربع
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') !== 'parquet') return 0;
   return (d.rows || []).reduce((s, r) => s + num(r.qty2), 0);

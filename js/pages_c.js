@@ -147,6 +147,36 @@ Pages.calc = {
   }
 };
 
+/* ── به‌روزرسانی برنامه ── */
+const APK_URL = 'https://github.com/ArashFAQ/salesmate/releases/download/apk-latest/SalesMate.apk';
+function verNum(v) { const m = String(v || '').match(/\d+(?:\.\d+)+/); return m ? m[0].split('.').map(Number) : null; }
+function verGt(a, b) { a = verNum(a); b = verNum(b); if (!a || !b) return false; for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; } return false; }
+async function latestVersions() {
+  let apk = null, web = null;
+  try { const r = await fetch('https://api.github.com/repos/ArashFAQ/salesmate/releases/tags/apk-latest', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); const m = String(j.body || '').match(/SM_VERSION=(\d+(?:\.\d+)+)/); apk = m ? m[1] : null; } } catch (e) {}
+  try { const r = await fetch('https://raw.githubusercontent.com/ArashFAQ/salesmate/main/js/core.js?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) { const t = await r.text(); const m = t.match(/APP_VERSION\s*=\s*'([\d.]+)'/); web = m ? m[1] : null; } } catch (e) {}
+  return { apk, web };
+}
+function openExternal(url) { try { const w = window.open(url, '_system'); if (!w) location.href = url; } catch (e) { location.href = url; } }
+function bindUpdateCard(root) {
+  const btn = root.querySelector('#upChk'), out = root.querySelector('#upOut'); if (!btn) return;
+  btn.onclick = async () => {
+    btn.disabled = true; out.innerHTML = '<span class="muted">در حال بررسی…</span>';
+    const v = await latestVersions(), isApp = !!window.Capacitor, newest = v.apk || v.web;
+    btn.disabled = false;
+    if (!newest) { out.innerHTML = '<span class="err-t">اتصال به اینترنت یا گیت‌هاب برقرار نشد.</span>'; return; }
+    if (!verGt(newest, APP_VERSION)) { out.innerHTML = '<span class="tag green">نسخه‌ی شما به‌روز است (' + fa(APP_VERSION) + ')</span>'; return; }
+    if (isApp) {
+      if (v.apk && verGt(v.apk, APP_VERSION)) out.innerHTML = '<div style="margin-bottom:8px">نسخه‌ی جدید <b>' + fa(v.apk) + '</b> آماده است.</div><button class="btn block" id="upGo">⬇ دانلود و نصب نسخه‌ی ' + fa(v.apk) + '</button><div class="muted" style="margin-top:6px;font-size:12px">پس از دانلود، فایل را باز کنید و «نصب» را بزنید (اطلاعات شما پاک نمی‌شود).</div>';
+      else out.innerHTML = '<div>نسخه‌ی ' + fa(v.web) + ' منتشر شده ولی فایل نصبی آن هنوز ساخته نشده. کمی بعد دوباره بررسی کنید.</div>';
+      const go = out.querySelector('#upGo'); if (go) go.onclick = () => openExternal(APK_URL);
+    } else {
+      out.innerHTML = '<div style="margin-bottom:8px">نسخه‌ی جدید <b>' + fa(newest) + '</b> موجود است.</div><button class="btn block" id="upGo">⟳ به‌روزرسانی همین حالا</button>';
+      out.querySelector('#upGo').onclick = async () => { try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } catch (e) {} location.reload(); };
+    }
+  };
+}
+
 /* ── تنظیمات ── */
 Pages.settings = {
   title: 'تنظیمات',
@@ -157,9 +187,11 @@ Pages.settings = {
       [['auto', '🌓 خودکار'], ['light', '☀️ روشن'], ['dark', '🌙 تاریک']].map(x => '<button class="btn' + (th === x[0] ? '' : ' sec') + '" data-theme-set="' + x[0] + '">' + x[1] + '</button>').join('') +
       '</div><div class="muted" style="margin-top:6px;font-size:12px">«خودکار» از تم گوشی پیروی می‌کند.</div></div>' +
       '<div class="card"><h2>حساب</h2><div class="pill-row"><span>ایمیل</span><b class="ltr">' + esc(Auth.email() || '—') + '</b></div><div class="pill-row"><span>نسخه برنامه</span><b>' + fa(APP_VERSION) + ' (فقط‌خواندنی)</b></div><div class="grid2" style="margin-top:10px"><button class="btn" id="rf">⟳ به‌روزرسانی همه</button><button class="btn sec" id="lo">خروج</button></div></div>' +
+      '<div class="card"><h2>به‌روزرسانی برنامه</h2><div class="pill-row"><span>نسخه‌ی نصب‌شده</span><b>' + fa(APP_VERSION) + '</b></div><button class="btn block" id="upChk" style="margin-top:10px">🔍 بررسی نسخه‌ی جدید</button><div id="upOut" style="margin-top:10px"></div></div>' +
       '<div class="card"><h2>وضعیت داده‌ها</h2>' + names.map(k => { const n = Store.data[k] == null ? 0 : (Array.isArray(Store.data[k]) ? Store.data[k].length : (Store.data[k].rows ? Store.data[k].rows.length : (Store.data[k].results ? Store.data[k].results.length : 1))); return '<div class="pill-row"><span>' + esc(DS[k].label) + '</span><span>' + (Store.err[k] ? '<span class="tag red">خطا</span>' : Store.data[k] == null ? '<span class="tag amber">خالی</span>' : '<span class="tag green">' + fa(n) + '</span>') + ' <span class="muted">' + ago(Store.at[k]) + '</span></span></div>' + (Store.err[k] ? '<div class="err-t">' + esc(Store.err[k]) + '</div>' : ''); }).join('') + '</div>' +
       '<div class="card"><h2>راهنما</h2><div class="muted" style="line-height:1.9">• این برنامه فقط از ابر می‌خواند و هیچ چیزی در ابر نمی‌نویسد.<br>• داده‌ها آفلاین هم نمایش داده می‌شوند (آخرین نسخه‌ی دریافت‌شده).<br>• آمار پارکت، سمپل/استند و بالانس را برنامه‌ی ویندوز هنگام «ارسال به ابر» می‌فرستد.<br>• اگر آمار خالی بود: فایل <span class="ltr">SUPABASE_MOBILE.sql</span> را در Supabase اجرا و در ویندوز «ارسال به ابر» را بزنید.</div>' +
       '<button class="btn sec block" id="cc" style="margin-top:10px">پاک‌کردن کش گوشی</button></div>';
+    bindUpdateCard(root);
     root.querySelectorAll('[data-theme-set]').forEach(b => b.onclick = () => { setTheme(b.dataset.themeSet); this.render(root); });
     root.querySelector('#rf').onclick = async () => { const f = await refreshAll(); toast(f ? 'بعضی داده‌ها دریافت نشد' : 'به‌روزرسانی شد', !!f); this.render(root); };
     root.querySelector('#lo').onclick = async () => { if (!confirm('از حساب خارج می‌شوید؟')) return; Auth.logout(); await Cache.clear(); location.reload(); };
