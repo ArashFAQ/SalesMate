@@ -51,5 +51,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete apk-latest --yes --cleanup-tag || true
+          VER=$(grep -m1 -oE "APP_VERSION = '[0-9.]+'" www/js/core.js | grep -oE "[0-9.]+")
           gh release create apk-latest SalesMate.apk --title "SalesMate APK" \
-            --notes "آخرین نسخه‌ی APK از وب‌اپ SalesMate (ساخته‌شده از شاخه main)."
+            --notes "آخرین نسخه‌ی APK از وب‌اپ SalesMate (ساخته‌شده از شاخه main). SM_VERSION=$VER"
