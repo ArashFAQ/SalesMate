@@ -17,11 +17,21 @@ const DS = {
   cw_cheques: { path: u => '/rest/v1/coworker_snapshots?assignee=eq.' + u + '&select=cheques', user: true, single: true, col: 'cheques', label: 'چک‌های در راه (همکار)' }
 };
 const Store = { data: {}, at: {}, err: {}, busy: false };
+/* حواله‌ی تکراری ابر (همان شماره + تاریخ + مشتری) فقط یک بار نشان داده شود؛ قدیمی‌ترین می‌ماند */
+function dedupeRows(k, arr) {
+  if (k !== 'invoices' || !Array.isArray(arr)) return arr;
+  const seen = new Set(), out = [];
+  arr.forEach(r => {
+    const key = [en(String(r.invoice_no || '')).trim(), String(r.date || '').trim(), String(r.customer || '').trim()].join('|');
+    if (seen.has(key)) return; seen.add(key); out.push(r);
+  });
+  return out;
+}
 
 async function loadCached() {                                  // بلافاصله از کش بخوان
   await Promise.all(Object.keys(DS).filter(k => isOwner() || !OWNER_DS.includes(k)).map(async k => {
     const c = await Cache.get('ds_' + k);
-    if (c) { Store.data[k] = c.data; Store.at[k] = c.at; }
+    if (c) { Store.data[k] = dedupeRows(k, c.data); Store.at[k] = c.at; }
   }));
 }
 async function fetchOne(k) {
@@ -38,6 +48,7 @@ async function fetchOne(k) {
     }
     if (d.single) data = data && data[0] ? data[0][d.col || 'payload'] : null;
   }
+  data = dedupeRows(k, data);
   Store.data[k] = data; Store.at[k] = Date.now(); delete Store.err[k];
   await Cache.set('ds_' + k, { data: data, at: Store.at[k] });
   return data;
