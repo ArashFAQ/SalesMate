@@ -54,9 +54,25 @@ jobs:
         run: |
           mkdir -p ~/.android
           cp debug.keystore ~/.android/debug.keystore
+          python3 - <<'PY'
+          import re
+          p = 'android/app/build.gradle'
+          s = open(p).read()
+          blk = ("signingConfigs {\n        debug {\n            storeFile file(\"${rootDir}/../debug.keystore\")\n"
+                 "            storePassword 'android'\n            keyAlias 'androiddebugkey'\n            keyPassword 'android'\n        }\n    }\n    ")
+          assert 'signingConfigs' not in s
+          s = s.replace('buildTypes {', blk + 'buildTypes {', 1)
+          open(p, 'w').write(s)
+          PY
+          grep -n -A6 "signingConfigs" android/app/build.gradle
       - name: Build
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
+      - name: Verify signing key
+        run: |
+          mkdir -p chk && unzip -o -q android/app/build/outputs/apk/debug/app-debug.apk 'META-INF/*.RSA' -d chk
+          keytool -printcert -file chk/META-INF/CERT.RSA | tee cert.txt
+          grep -q "CN=SalesMate" cert.txt
       - name: Collect APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk SalesMate.apk
       - uses: actions/upload-artifact@v4
