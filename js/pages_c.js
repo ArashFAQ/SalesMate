@@ -167,16 +167,16 @@ async function nativeUpdate(out, ver) {
   const show = h => { box.innerHTML = h; };
   const doInstall = async () => {
     const r = await P.install();
-    if (r && r.needPermission) show('<div class="err-t" style="margin-bottom:8px">اجازه‌ی «نصب از این برنامه» را روشن کنید، برگردید و دکمه‌ی زیر را بزنید.</div><button class="btn block" id="upInst">نصب نسخه‌ی ' + fa(ver) + '</button>'), box.querySelector('#upInst').onclick = () => doInstall().catch(() => nativeFail());
+    if (r && r.needPermission) show('<div class="err-t" style="margin-bottom:8px">اجازه‌ی «نصب از این برنامه» را روشن کنید، برگردید و دکمه‌ی زیر را بزنید.</div><button class="btn block" id="upInst">نصب نسخه‌ی ' + fa(ver) + '</button>'), box.querySelector('#upInst').onclick = () => doInstall().catch(e => nativeFail(e));
   };
-  const nativeFail = () => { show('<div class="err-t">نصب مستقیم ممکن نشد؛ دانلود از مرورگر باز شد.</div>'); openExternal(APK_URL); };
+  const nativeFail = e => { show('<div class="err-t">نصب مستقیم ممکن نشد؛ دانلود از مرورگر باز شد.<br><span class="muted" style="font-size:11px;direction:ltr;display:block">' + esc(String((e && e.message) || e || '')) + '</span></div>'); openExternal(APK_URL); };
   try {
     show('<div class="muted" id="upTxt">در حال دانلود… ۰٪</div><div style="height:8px;background:var(--line);border-radius:6px;margin-top:6px;overflow:hidden"><div id="upBar" style="height:100%;width:0;background:#1565C0;transition:width .15s"></div></div>');
     const h = await P.addListener('progress', e => { const pc = e.total > 0 ? Math.round(100 * e.done / e.total) : 0; const t = box.querySelector('#upTxt'), b = box.querySelector('#upBar'); if (t) t.textContent = 'در حال دانلود… ' + fa(pc) + '٪'; if (b) b.style.width = pc + '%'; });
     try { await P.download({ url: APK_URL }); } finally { try { h.remove(); } catch (e) {} }
     show('<div class="muted">دانلود کامل شد؛ صفحه‌ی نصب باز می‌شود…</div>');
     await doInstall();
-  } catch (e) { nativeFail(); }
+  } catch (e) { nativeFail(e); }
   return true;
 }
 function openExternal(url) { try { const w = window.open(url, '_system'); if (!w) location.href = url; } catch (e) { location.href = url; } }
