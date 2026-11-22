@@ -37,7 +37,7 @@ function renderInquiryCanvas(d, buyerFallback) {      // دقیقاً هم‌ق�
     c.strokeStyle = '#e2e8f0'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, y + rh[i]); c.lineTo(W, y + rh[i]); c.stroke(); y += rh[i];
   });
   y += 14; rr(0.5, y, W - 1, 5 * 30 + 20, 12, '#f8fafc', '#e2e8f0'); y += 10;
-  [[tax ? 'مبلغ کل اقلام (با مالیات)' : 'مبلغ کل اقلام', fmt(T.sub), 1], ['انبارداری', d.warehouse || '—'], ['حمل', d.transport || 'به عهده مشتری می‌باشد'], ['بدهی پیشین', T.debt ? fmt(T.debt) : '۰'], ['تخفیف', T.disc ? fmt(T.disc) : '۰']].forEach(r => { tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#0f172a'); tx(r[1], 14, y + 15, 'left', (r[2] ? '700' : '500') + ' 12px ' + font, '#0f172a'); y += 30; });
+  [['مبلغ کل اقلام', fmt(T.sub), 1], ['انبارداری', d.warehouse || '—'], ['حمل', d.transport || 'به عهده مشتری می‌باشد'], ['بدهی پیشین', T.debt ? fmt(T.debt) : '۰'], ['تخفیف', T.disc ? fmt(T.disc) : '۰']].forEach(r => { tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#0f172a'); tx(r[1], 14, y + 15, 'left', (r[2] ? '700' : '500') + ' 12px ' + font, '#0f172a'); y += 30; });
   y += 10 + 14; const th = 90 + wL.length * 22; rr(0, y, W, th, 14, BLUE);
   tx('جمع کل قابل پرداخت', W - 18, y + 24, 'right', '500 13px ' + font, 'rgba(255,255,255,.8)');
   const tt = fmt(T.total); c.font = '900 24px ' + font; const tw = c.measureText(tt).width; tx(tt, 18, y + 58, 'left', '900 24px ' + font, '#fff'); tx('ریال', 18 + tw + 8, y + 60, 'left', '500 15px ' + font, '#fff');

@@ -33,11 +33,11 @@ const InqBuilder = {
     return { tax: 1, unit_ex: unit, unit_tax: taxIncl(unit), base, tax_amt: t, cost: base + t };
   },
   rowCost(r) { return this.rowCalc(r).cost; },
-  subOf() { const rs = this.S.rows.map(r => this.rowCalc(r)), s = rs.reduce((a, r) => a + r.cost, 0); return this.S.tax === false ? s : roundK(s); },
+  subOf() { const rs = this.S.rows.map(r => this.rowCalc(r)), s = rs.reduce((a, r) => a + r.cost, 0); return s; },
   snapshot() {
     const S = this.S, rows = S.rows.map((r, i) => Object.assign({ index: i + 1 }, r, this.rowCalc(r)));
     const sub = this.subOf();
-    return { tax: S.tax === false ? 0 : 1, tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.shaba, total: sub + amount(S.debt) - amount(S.discount) };
+    return { tax: S.tax === false ? 0 : 1, tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.shaba, total: inqPay(rows, amount(S.debt), amount(S.discount)) };
   },
   /* ───── رندر ───── */
   mount(root, preset, onClose) {
@@ -134,7 +134,7 @@ const InqBuilder = {
   },
   numberRows() { this.rowsEl.querySelectorAll('.rn').forEach((s, i) => { s.textContent = fa(i + 1); }); },
   recalc() {
-    const S = this.S, sub = this.subOf(), tot = sub + amount(S.debt) - amount(S.discount), q = id => this.root.querySelector('#' + id);
+    const S = this.S, sub = this.subOf(), tot = inqPay(S.rows.map(r => this.rowCalc(r)), amount(S.debt), amount(S.discount)), q = id => this.root.querySelector('#' + id);
     q('ibSub').textContent = fmt(sub); q('ibTot').textContent = fmt(tot); q('ibWords').textContent = tot ? numberToWords(tot) + ' ریال' : '';
     this.numberRows(); this.rowsEl.querySelectorAll('.inq-row').forEach((el, i) => { if (S.rows[i]) el.querySelector('.cv').textContent = fmt(this.rowCost(S.rows[i])); });
   },

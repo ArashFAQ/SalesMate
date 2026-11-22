@@ -15,7 +15,8 @@ function taxUnit(p) { p = Math.round(+p || 0); return Math.floor((p * 10 + 10) /
 function taxIncl(u) { return Math.floor((u * 11 + 5) / 10); }
 function taxAmt(b) { return Math.floor((b + 5) / 10); }
 function roundK(n) { return Math.floor((Math.round(n) + 500) / 1000) * 1000; }
-function inqSub(rows) { const s = rows.reduce((a, r) => a + amount(r.cost), 0); return rows.some(r => r.tax) ? roundK(s) : s; }
+function inqSub(rows) { return rows.reduce((a, r) => a + amount(r.cost), 0); }
+function inqPay(rows, debt, disc) { const t = inqSub(rows) + debt - disc; return rows.some(r => r.tax) ? roundK(t) : t; }
 function inqHasTax(d) { return (d.rows || []).some(r => r.tax); }
 
 /* ── ستون‌ها و جدول استعلام (مثل خروجی ویندوز) ── */
@@ -26,7 +27,7 @@ function inqCols(tab) {
 }
 function inqTotals(d) {
   const rows = d.rows || [], sub = inqSub(rows), debt = amount(d.debt), disc = amount(d.discount);
-  const total = d.total != null && d.total !== '' ? amount(d.total) : sub + debt - disc;
+  const total = d.total != null && d.total !== '' ? amount(d.total) : inqPay(rows, debt, disc);
   return { sub, debt, disc, total };
 }
 function inqTable(d) {                    // روی موبایل: هر قلم یک کارت خوانا (به‌جای جدول عریض)
@@ -42,7 +43,7 @@ function inqTable(d) {                    // روی موبایل: هر قلم ی
 }
 function inqSummaryHtml(d) {
   const T = inqTotals(d);
-  let h = '<div class="pill-row"><span>جمع اقلام' + (inqHasTax(d) ? ' (با مالیات)' : '') + '</span><b>' + fmt(T.sub) + ' ریال</b></div>';
+  let h = '<div class="pill-row"><span>جمع اقلام</span><b>' + fmt(T.sub) + ' ریال</b></div>';
   if (T.debt) h += '<div class="pill-row"><span>مانده قبلی</span><b>' + fmt(T.debt) + '</b></div>';
   if (T.disc) h += '<div class="pill-row"><span>تخفیف</span><b>' + fmt(T.disc) + '</b></div>';
   h += '<div class="pill-row"><span><b>مبلغ کل</b></span><b class="amt">' + fmt(T.total) + ' ریال</b></div>';
@@ -71,7 +72,7 @@ function inqText(d, buyerFallback) {                      // متن آماده�
     L.push(b.join(' · '));
   });
   L.push('');
-  L.push('جمع اقلام' + (inqHasTax(d) ? ' (با مالیات)' : '') + ': ' + fmt(T.sub) + ' ریال');
+  L.push('جمع اقلام: ' + fmt(T.sub) + ' ریال');
   if (T.debt) L.push('مانده قبلی: ' + fmt(T.debt) + ' ریال');
   if (T.disc) L.push('تخفیف: ' + fmt(T.disc) + ' ریال');
   L.push('*مبلغ کل: ' + fmt(T.total) + ' ریال*');
