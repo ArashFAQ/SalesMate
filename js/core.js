@@ -1,7 +1,7 @@
 /* SalesMate موبایل ۲.۰ — فقط‌خواندنی. هسته: ابزارها، تاریخ شمسی، کش، ورود، API */
 'use strict';
 function loginEmail(v) { v = String(v || '').trim(); return v && v.indexOf('@') < 0 ? v.toLowerCase() + '@sales.local' : v; }
-const APP_VERSION = '2.4.25';
+const APP_VERSION = '2.4.26';
 const SUPABASE_URL = 'https://sowftowkhvuvaijttpiv.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_5BrCyhkBlDQqbdjkGnEK1w_zpsHiAs8';
 
@@ -274,6 +274,32 @@ function openSheet(title, html, onMount) {
   if (onMount) onMount(document.getElementById('sheetBody'));
 }
 function closeSheet() { const sh = document.getElementById('sheet'); sh.classList.add('hidden'); sh.innerHTML = ''; }
+/* تقویم شمسی: pickJalali('1405/08/30', (y,m,d) => …) */
+function pickJalali(cur, cb) {
+  const t = todayJ(), c = parseJ(cur || '') || t;
+  let vy = c[0], vm = c[1], sel = c;
+  const ov = document.createElement('div'); ov.className = 'jcal-ov';
+  const close = () => { ov.remove(); };
+  const draw = () => {
+    const dim = vm <= 6 ? 31 : (vm <= 11 ? 30 : (isLeapJ(vy) ? 30 : 29));
+    const g = j2g(vy, vm, 1), first = (new Date(g[0], g[1] - 1, g[2]).getDay() + 1) % 7;   // شنبه = ۰
+    let cells = '';
+    for (let i = 0; i < first; i++) cells += '<span></span>';
+    for (let d = 1; d <= dim; d++) {
+      const isSel = sel && sel[0] === vy && sel[1] === vm && sel[2] === d, isTod = t[0] === vy && t[1] === vm && t[2] === d;
+      cells += '<button class="jd' + (isSel ? ' on' : '') + (isTod ? ' td' : '') + '" data-d="' + d + '">' + fa(d) + '</button>';
+    }
+    ov.innerHTML = '<div class="jcal"><div class="jc-head"><button class="x" data-nx="1">›</button><b>' + MONTHS[vm - 1] + ' ' + fa(vy) + '</b><button class="x" data-nx="-1">‹</button></div>' +
+      '<div class="jc-wk">' + ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map(x => '<i>' + x + '</i>').join('') + '</div><div class="jc-grid">' + cells + '</div>' +
+      '<div class="row between" style="margin-top:10px"><button class="btn sm sec" id="jcToday">امروز</button><button class="btn sm sec" id="jcClose">بستن</button></div></div>';
+    ov.querySelectorAll('[data-nx]').forEach(b => b.onclick = () => { vm += parseInt(b.dataset.nx, 10); if (vm > 12) { vm = 1; vy++; } if (vm < 1) { vm = 12; vy--; } draw(); });
+    ov.querySelectorAll('.jd').forEach(b => b.onclick = () => { const d = parseInt(b.dataset.d, 10); close(); cb(vy, vm, d); });
+    ov.querySelector('#jcToday').onclick = () => { close(); cb(t[0], t[1], t[2]); };
+    ov.querySelector('#jcClose').onclick = close;
+  };
+  ov.onclick = e => { if (e.target === ov) close(); };
+  document.body.appendChild(ov); draw();
+}
 async function shareText(text, title) {
   try {
     if (navigator.share) { await navigator.share({ title: title || 'SalesMate', text }); return true; }

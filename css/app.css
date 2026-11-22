@@ -85,3 +85,11 @@ body.kb .app{padding-bottom:40vh}
 .item.cc .debt,.item.cc .cred{color:#0F172A;font-weight:800}
 .pb{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:800;font-size:12px;color:#fff}.pb.red{background:#B91C1C}.pb.green{background:#047857}.pb.ok{background:#475569}
 .dif{display:inline-block;min-width:112px;text-align:left;font-size:12px;margin-inline-end:6px;vertical-align:middle}.dif b{font-weight:800}.dif .neg{color:#DC2626}.dif .pos{color:#059669}
+
+.jcal-ov{position:fixed;inset:0;z-index:70;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px}
+.jcal{background:var(--card,#fff);color:var(--text);width:100%;max-width:340px;border-radius:18px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.jc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.jc-wk,.jc-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.jc-wk i{font-style:normal;font-size:12px;color:var(--muted,#64748B);padding:4px 0}
+.jd{border:0;background:transparent;color:var(--text);height:38px;border-radius:10px;font:inherit;cursor:pointer}
+.jd:active{background:var(--line)}.jd.td{outline:1.5px solid #1565C0}.jd.on{background:#1565C0;color:#fff;font-weight:700}

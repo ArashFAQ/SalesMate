@@ -48,7 +48,7 @@ const InqBuilder = {
       '<div class="row between" style="margin-bottom:10px"><button class="btn sm sec" id="ibBack">‹ لیست استعلام‌ها</button><button class="btn sm sec" id="ibClear">پاک‌کردن فرم</button></div>' +
       '<div class="seg" id="ibTabs">' + [['parquet', 'پارکت'], ['mdf', 'ام‌دی‌اف'], ['raw', 'ام‌دی‌اف خام']].map(x => '<button data-t="' + x[0] + '" class="' + (S.tab === x[0] ? 'on' : '') + '">' + x[1] + '</button>').join('') + '</div>' +
       '<div class="card" id="ibBuyerCard"><div style="position:relative"><label>نام خریدار — هر بخشی از نام را بنویسید</label><input id="ibBuyer" class="inqf" autocomplete="off" enterkeyhint="next" placeholder="نام مشتری…" value="' + esc(S.buyer) + '"><div class="sugg hidden" id="ibSug"></div></div><div class="muted" id="ibBal" style="margin-top:4px"></div>' +
-      '<label>تاریخ</label><input id="ibDate" class="inqf ltr" inputmode="decimal" enterkeyhint="next" value="' + esc(fa(S.date)) + '"></div>' +
+      '<label>تاریخ</label><input id="ibDate" class="inqf ltr" readonly inputmode="none" style="cursor:pointer" placeholder="انتخاب تاریخ" value="' + esc(fa(S.date)) + '"></div>' +
       '<div class="row between" style="margin:4px 2px 8px"><b>اقلام کالا</b><button class="btn sm sec" id="ibAdd">+ افزودن ردیف</button></div><div id="ibRows"></div>' +
       '<div class="card"><div class="pill-row"><span>جمع اقلام</span><b id="ibSub">۰</b></div><label>هزینه انبارداری</label><input id="ibWh" class="inqf" enterkeyhint="next" value="' + esc(S.warehouse) + '"><label>هزینه حمل</label><input id="ibTr" class="inqf" enterkeyhint="next" value="' + esc(S.transport) + '">' +
       '<label>بدهی پیشین (ریال)</label><input id="ibDebt" class="inqf ltr" inputmode="numeric" enterkeyhint="next" value="' + esc(commas(S.debt) || '0') + '"><label>تخفیف (ریال)</label><input id="ibDisc" class="inqf ltr" inputmode="numeric" enterkeyhint="next" value="' + esc(commas(S.discount) || '0') + '">' +
@@ -65,7 +65,7 @@ const InqBuilder = {
     const bind = (id, key, fmtFn) => { const el = q(id); if (!el) return; el.oninput = () => { let v = el.value; if (fmtFn) { v = fmtFn(v); el.value = v; } S[key] = v; this.save(); this.recalc(); }; };
     bind('ibWh', 'warehouse'); bind('ibTr', 'transport'); bind('ibVal', 'validity'); bind('ibSh', 'shaba');
     bind('ibDebt', 'debt', v => commas(v) || '0'); bind('ibDisc', 'discount', v => commas(v) || '0');
-    q('ibDate').oninput = () => { S.date = en(q('ibDate').value); this.save(); };
+    q('ibDate').onclick = () => pickJalali(S.date, (y, m, d) => { S.date = y + '/' + p2(m) + '/' + p2(d); q('ibDate').value = fa(S.date); this.save(); });
     this.bindBuyer();
     root.querySelectorAll('.inqf').forEach(el => this.wireEnter(el));
     root.querySelectorAll('input').forEach(el => { el.onfocus = () => document.body.classList.add('kb'); el.onblur = () => setTimeout(() => { if (!document.activeElement || !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) document.body.classList.remove('kb'); }, 150); });
