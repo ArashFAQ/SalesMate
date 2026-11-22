@@ -10,6 +10,14 @@ function snapMissing(k) {
 }
 function kpi(cls, label, value, sub) { return '<div class="kpi ' + cls + '"><div class="l">' + esc(label) + '</div><div class="v">' + value + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>'; }
 
+/* ── مالیات ۱۰٪ استعلام (مثل ویندوز) ── */
+function taxUnit(p) { p = Math.round(+p || 0); return Math.floor((p * 10 + 10) / 11); }
+function taxIncl(u) { return Math.floor((u * 11 + 5) / 10); }
+function taxAmt(b) { return Math.floor((b + 5) / 10); }
+function roundK(n) { return Math.floor((Math.round(n) + 500) / 1000) * 1000; }
+function inqSub(rows) { const s = rows.reduce((a, r) => a + amount(r.cost), 0); return rows.some(r => r.tax) ? roundK(s) : s; }
+function inqHasTax(d) { return (d.rows || []).some(r => r.tax); }
+
 /* ── ستون‌ها و جدول استعلام (مثل خروجی ویندوز) ── */
 function inqCols(tab) {
   if (tab === 'mdf') return { h: ['ردیف', 'نوع کالا', 'کد', 'پالت', 'ورق', 'قیمت واحد', 'هزینه (ریال)'], c: r => [r.type || '', r.code || '', qtyInt(r.qty1), fm(num(r.qty2), 3), fmt(r.price), fmt(r.cost)] };
@@ -17,7 +25,7 @@ function inqCols(tab) {
   return { h: ['ردیف', 'کد کالا', 'نوع کالا', 'گرید', 'کارتن', 'متر مربع', 'قیمت واحد', 'هزینه (ریال)'], c: r => [en(r.code || ''), r.type || '', r.grade || '', qtyInt(r.qty1), fm(num(r.qty2), 4), fmt(r.price), fmt(r.cost)] };
 }
 function inqTotals(d) {
-  const rows = d.rows || [], sub = rows.reduce((s, r) => s + amount(r.cost), 0), debt = amount(d.debt), disc = amount(d.discount);
+  const rows = d.rows || [], sub = inqSub(rows), debt = amount(d.debt), disc = amount(d.discount);
   const total = d.total != null && d.total !== '' ? amount(d.total) : sub + debt - disc;
   return { sub, debt, disc, total };
 }
@@ -29,12 +37,12 @@ function inqTable(d) {                    // روی موبایل: هر قلم ی
       '<div class="muted" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:2px">' +
       (r.qty1 !== '' && r.qty1 != null ? '<span>' + u[0] + ': <b>' + fa(qtyInt(r.qty1)) + '</b></span>' : '') +
       (r.qty2 !== '' && r.qty2 != null ? '<span>' + u[1] + ': <b>' + fm(num(r.qty2), 4) + '</b></span>' : '') +
-      (r.price ? '<span>فی: <b>' + fmt(r.price) + '</b></span>' : '') + '</div></div>';
+      (r.tax ? '<span>فی: <b>' + fmt(r.unit_ex) + '</b></span><span>با مالیات: <b>' + fmt(r.unit_tax) + '</b></span><span>مالیات: <b>' + fmt(r.tax_amt) + '</b></span>' : (r.price ? '<span>فی: <b>' + fmt(r.price) + '</b></span>' : '')) + '</div></div>';
   }).join('');
 }
 function inqSummaryHtml(d) {
   const T = inqTotals(d);
-  let h = '<div class="pill-row"><span>جمع اقلام</span><b>' + fmt(T.sub) + ' ریال</b></div>';
+  let h = '<div class="pill-row"><span>جمع اقلام' + (inqHasTax(d) ? ' (با مالیات)' : '') + '</span><b>' + fmt(T.sub) + ' ریال</b></div>';
   if (T.debt) h += '<div class="pill-row"><span>مانده قبلی</span><b>' + fmt(T.debt) + '</b></div>';
   if (T.disc) h += '<div class="pill-row"><span>تخفیف</span><b>' + fmt(T.disc) + '</b></div>';
   h += '<div class="pill-row"><span><b>مبلغ کل</b></span><b class="amt">' + fmt(T.total) + ' ریال</b></div>';
@@ -58,12 +66,12 @@ function inqText(d, buyerFallback) {                      // متن آماده�
     if (r.size) b.push(r.size);
     if (r.qty1 !== '' && r.qty1 != null) b.push(fa(qtyInt(r.qty1)) + ' ' + u[0]);
     if (r.qty2 !== '' && r.qty2 != null) b.push(fm(num(r.qty2), 4) + ' ' + u[1]);
-    if (r.price) b.push('فی ' + fmt(r.price));
+    if (r.tax) { b.push('فی ' + fmt(r.unit_ex)); b.push('با مالیات ' + fmt(r.unit_tax)); b.push('مالیات ' + fmt(r.tax_amt)); } else if (r.price) b.push('فی ' + fmt(r.price));
     b.push('= ' + fmt(r.cost));
     L.push(b.join(' · '));
   });
   L.push('');
-  L.push('جمع اقلام: ' + fmt(T.sub) + ' ریال');
+  L.push('جمع اقلام' + (inqHasTax(d) ? ' (با مالیات)' : '') + ': ' + fmt(T.sub) + ' ریال');
   if (T.debt) L.push('مانده قبلی: ' + fmt(T.debt) + ' ریال');
   if (T.disc) L.push('تخفیف: ' + fmt(T.disc) + ' ریال');
   L.push('*مبلغ کل: ' + fmt(T.total) + ' ریال*');

@@ -22,16 +22,22 @@ const InqBuilder = {
   S: null, custs: [],
   fresh(tab) {
     const t = todayJ();
-    return { tab: tab || 'parquet', buyer: '', date: t[0] + '/' + p2(t[1]) + '/' + p2(t[2]), rows: [], warehouse: '', transport: 'به عهده مشتری می‌باشد', debt: '0', discount: '0', validity: '', shaba: 'IR650120020000005081809111' };
+    return { tax: true, tab: tab || 'parquet', buyer: '', date: t[0] + '/' + p2(t[1]) + '/' + p2(t[2]), rows: [], warehouse: '', transport: 'به عهده مشتری می‌باشد', debt: '0', discount: '0', validity: '', shaba: 'IR650120020000005081809111' };
   },
   validityFor(tab) { return tab === 'mdf' ? 'اعتبار این استعلام کالا از تاریخ صدور تا ساعت ۱۱ همان روز می‌باشد' : 'اعتبار این استعلام کالا از تاریخ صدور تا پایان وقت اداری همان روز می‌باشد'; },
   newRow(tab) { return tab === 'parquet' ? { code: '', type: PRODUCT_OPTIONS[0], grade: 'GA', qty1: '', qty2: '', price: '' } : tab === 'mdf' ? { type: '', code: '', qty1: '', qty2: '', price: '' } : { type: '', size: '', qty1: '', qty2: '', price: '' }; },
   save() { lsSet('sm_inq_draft', this.S); },
-  rowCost(r) { return Math.round(num(r.qty2) * amount(r.price)); },
+  rowCalc(r) {
+    if (this.S.tax === false) return { cost: Math.round(num(r.qty2) * amount(r.price)) };
+    const unit = taxUnit(amount(r.price)), base = Math.round(num(r.qty2) * unit), t = taxAmt(base);
+    return { tax: 1, unit_ex: unit, unit_tax: taxIncl(unit), base, tax_amt: t, cost: base + t };
+  },
+  rowCost(r) { return this.rowCalc(r).cost; },
+  subOf() { const rs = this.S.rows.map(r => this.rowCalc(r)), s = rs.reduce((a, r) => a + r.cost, 0); return this.S.tax === false ? s : roundK(s); },
   snapshot() {
-    const S = this.S, rows = S.rows.map((r, i) => Object.assign({ index: i + 1 }, r, { cost: this.rowCost(r) }));
-    const sub = rows.reduce((a, r) => a + r.cost, 0);
-    return { tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.shaba, total: sub + amount(S.debt) - amount(S.discount) };
+    const S = this.S, rows = S.rows.map((r, i) => Object.assign({ index: i + 1 }, r, this.rowCalc(r)));
+    const sub = this.subOf();
+    return { tax: S.tax === false ? 0 : 1, tab: S.tab, buyer: S.buyer.trim(), date: en(S.date), rows, warehouse: S.warehouse, transport: S.transport, debt: en(S.debt), discount: en(S.discount), validity: S.validity, shaba: S.shaba, total: sub + amount(S.debt) - amount(S.discount) };
   },
   /* ───── رندر ───── */
   mount(root, preset, onClose) {
@@ -128,7 +134,7 @@ const InqBuilder = {
   },
   numberRows() { this.rowsEl.querySelectorAll('.rn').forEach((s, i) => { s.textContent = fa(i + 1); }); },
   recalc() {
-    const S = this.S, sub = S.rows.reduce((a, r) => a + this.rowCost(r), 0), tot = sub + amount(S.debt) - amount(S.discount), q = id => this.root.querySelector('#' + id);
+    const S = this.S, sub = this.subOf(), tot = sub + amount(S.debt) - amount(S.discount), q = id => this.root.querySelector('#' + id);
     q('ibSub').textContent = fmt(sub); q('ibTot').textContent = fmt(tot); q('ibWords').textContent = tot ? numberToWords(tot) + ' ریال' : '';
     this.numberRows(); this.rowsEl.querySelectorAll('.inq-row').forEach((el, i) => { if (S.rows[i]) el.querySelector('.cv').textContent = fmt(this.rowCost(S.rows[i])); });
   },
@@ -196,7 +202,7 @@ const InqBuilder = {
     if (loc) {
       loc.innerHTML = local.map((d, i) => '<div class="item" data-i="' + i + '"><div class="row between"><span class="t">' + esc(d.buyer || '—') + '</span><span class="amt">' + fmt(d.total) + '</span></div><div class="row between m"><span>' + fa(en(d.date || '')) + ' · ' + fa((d.rows || []).length) + ' قلم</span><span class="row"><button class="btn sm sec" data-ed="' + i + '">ویرایش</button><button class="btn sm sec" data-del="' + i + '">حذف</button></span></div></div>').join('');
       loc.querySelectorAll('[data-i]').forEach(el => el.onclick = () => showInquiry(local[+el.dataset.i], ''));
-      loc.querySelectorAll('[data-ed]').forEach(b => b.onclick = e => { e.stopPropagation(); const d = JSON.parse(JSON.stringify(local[+b.dataset.ed])); delete d._fp; d.rows = d.rows.map(r => { const o = Object.assign({}, r); delete o.cost; delete o.index; return o; }); st.preset = Object.assign(InqBuilder.fresh(d.tab), d); st.mode = 'new'; this.render(root); });
+      loc.querySelectorAll('[data-ed]').forEach(b => b.onclick = e => { e.stopPropagation(); const d = JSON.parse(JSON.stringify(local[+b.dataset.ed])); delete d._fp; d.rows = d.rows.map(r => { const o = Object.assign({}, r); ['cost', 'index', 'tax', 'unit_ex', 'unit_tax', 'base', 'tax_amt'].forEach(k => delete o[k]); return o; }); st.preset = Object.assign(InqBuilder.fresh(d.tab), d, { tax: !!d.tax }); st.mode = 'new'; this.render(root); });
       loc.querySelectorAll('[data-del]').forEach(b => b.onclick = e => { e.stopPropagation(); if (!confirm('این استعلام از گوشی حذف شود؟')) return; local.splice(+b.dataset.del, 1); lsSet('sm_inq_local', local); this.render(root); });
     }
     const holder = document.createElement('div'); root.querySelector('#cloud').appendChild(holder);

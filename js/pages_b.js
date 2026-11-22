@@ -10,8 +10,10 @@ function wrapLines(ctx, text, maxW) {
 function renderInquiryCanvas(d, buyerFallback) {      // دقیقاً هم‌قالب خروجی ویندوز
   const t = d.tab || 'parquet', rows = d.rows || [], T = inqTotals(d), W = 800, S = 3.5, font = 'Vazirmatn, Tahoma, sans-serif', BLUE = '#0284c7';
   const heads = t === 'parquet' ? ['ردیف', 'کد کالا', 'نوع کالا', 'گرید', 'مقدار (کارتن)', 'مقدار (متر مربع)', 'قیمت واحد (ریال)', 'هزینه کالا (ریال)'] : t === 'mdf' ? ['ردیف', 'نوع کالا', 'کد', 'مقدار (پالت)', 'مقدار (ورق)', 'قیمت واحد (ریال)', 'هزینه کالا (ریال)'] : ['ردیف', 'نوع کالا', 'سایز', 'مقدار (پالت)', 'مقدار (ورق)', 'قیمت واحد (ریال)', 'هزینه کالا (ریال)'];
-  const fr = t === 'parquet' ? [0.06, 0.10, 0.17, 0.08, 0.13, 0.14, 0.15, 0.17] : [0.07, 0.27, 0.14, 0.11, 0.13, 0.13, 0.15], cw = fr.map(f => f * W);
+  const fr = tax ? (t === 'parquet' ? [0.05, 0.08, 0.12, 0.06, 0.08, 0.10, 0.125, 0.125, 0.12, 0.14] : [0.05, 0.13, 0.09, 0.09, 0.09, 0.13, 0.13, 0.13, 0.16]) : (t === 'parquet' ? [0.06, 0.10, 0.17, 0.08, 0.13, 0.14, 0.15, 0.17] : [0.07, 0.27, 0.14, 0.11, 0.13, 0.13, 0.15]), cw = fr.map(f => f * W);
+  const tax = inqHasTax(d), heads2 = heads.slice(0, -2).concat(['قیمت واحد (ریال)', 'قیمت با مالیات (ریال)', 'مالیات ۱۰٪ (ریال)', 'جمع (ریال)']);
   const cells = rows.map((r, i) => (t === 'parquet' ? [fa(i + 1), fa(en(r.code || '—')), r.type || '', r.grade || '', fa(qtyInt(r.qty1) || '—'), fa(r.qty2 || '—'), fmt(r.price), fmt(r.cost)] : t === 'mdf' ? [fa(i + 1), r.type || '', fa(en(r.code || '—')), fa(qtyInt(r.qty1) || '—'), fa(r.qty2 || '—'), fmt(r.price), fmt(r.cost)] : [fa(i + 1), r.type || '', fa(en(r.size || '')), fa(qtyInt(r.qty1) || '—'), fa(r.qty2 || '—'), fmt(r.price), fmt(r.cost)]));
+  if (tax) cells.forEach((cs, i) => { const r = rows[i]; cs.splice(cs.length - 2, 2, fmt(r.unit_ex), fmt(r.unit_tax), fmt(r.tax_amt), fmt(r.cost)); });
   const mc = document.createElement('canvas').getContext('2d'); mc.font = '500 12px ' + font;
   const rh = cells.map(cs => { let n = 1; cs.forEach((c, j) => { n = Math.max(n, wrapLines(mc, c, cw[j] - 10).length); }); return 14 + n * 18; });
   const terms = ['پس از واریز مبلغ به حساب شرکت و تأیید واحد حسابداری، حواله خروج بار صادر می‌گردد.', 'پس از خروج کالا از انبار شرکت هیچ مسئولیتی از لحاظ کمیت و کیفیت/سلامت کالا ندارد.', 'پس از فروش کالا به هیچ عنوان مرجوعی و ابطال حواله انجام نمی‌شود.'];
@@ -28,14 +30,14 @@ function renderInquiryCanvas(d, buyerFallback) {      // دقیقاً هم‌ق�
   rr(W - bw, y, bw, 78, 12, BLUE); tx('خریدار', W - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); tx(d.buyer || buyerFallback || '—', W - 16, y + 46, 'right', '800 16px ' + font, '#fff');
   const dw = bw * 0.7; rr(0, y, dw, 78, 12, BLUE); tx('تاریخ', dw - 16, y + 18, 'right', '500 11px ' + font, 'rgba(255,255,255,.85)'); tx(fa(en(d.date || '—')), dw - 16, y + 46, 'right', '800 16px ' + font, '#fff');
   y += 78 + 12;
-  c.fillStyle = BLUE; c.fillRect(0, y, W, 34); let x = W; heads.forEach((h, j) => { tx(h, x - cw[j] / 2, y + 17, 'center', '600 11px ' + font, '#fff'); x -= cw[j]; }); y += 34;
+  c.fillStyle = BLUE; c.fillRect(0, y, W, 34); let x = W; (tax ? heads2 : heads).forEach((h, j) => { tx(h, x - cw[j] / 2, y + 17, 'center', '600 11px ' + font, '#fff'); x -= cw[j]; }); y += 34;
   cells.forEach((cs, i) => {
     c.fillStyle = i % 2 ? '#f8fafc' : '#fff'; c.fillRect(0, y, W, rh[i]); let xx = W;
     cs.forEach((cell, j) => { const ls = wrapLines(c, cell, cw[j] - 10); c.font = '500 12px ' + font; ls.forEach((l, k) => tx(l, xx - cw[j] / 2, y + 7 + 9 + k * 18 + (rh[i] - 14 - ls.length * 18) / 2, 'center', '500 12px ' + font, '#0f172a')); xx -= cw[j]; });
     c.strokeStyle = '#e2e8f0'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, y + rh[i]); c.lineTo(W, y + rh[i]); c.stroke(); y += rh[i];
   });
   y += 14; rr(0.5, y, W - 1, 5 * 30 + 20, 12, '#f8fafc', '#e2e8f0'); y += 10;
-  [['مبلغ کل اقلام', fmt(T.sub), 1], ['انبارداری', d.warehouse || '—'], ['حمل', d.transport || 'به عهده مشتری می‌باشد'], ['بدهی پیشین', T.debt ? fmt(T.debt) : '۰'], ['تخفیف', T.disc ? fmt(T.disc) : '۰']].forEach(r => { tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#0f172a'); tx(r[1], 14, y + 15, 'left', (r[2] ? '700' : '500') + ' 12px ' + font, '#0f172a'); y += 30; });
+  [[tax ? 'مبلغ کل اقلام (با مالیات)' : 'مبلغ کل اقلام', fmt(T.sub), 1], ['انبارداری', d.warehouse || '—'], ['حمل', d.transport || 'به عهده مشتری می‌باشد'], ['بدهی پیشین', T.debt ? fmt(T.debt) : '۰'], ['تخفیف', T.disc ? fmt(T.disc) : '۰']].forEach(r => { tx(r[0], W - 14, y + 15, 'right', '500 12px ' + font, '#0f172a'); tx(r[1], 14, y + 15, 'left', (r[2] ? '700' : '500') + ' 12px ' + font, '#0f172a'); y += 30; });
   y += 10 + 14; const th = 90 + wL.length * 22; rr(0, y, W, th, 14, BLUE);
   tx('جمع کل قابل پرداخت', W - 18, y + 24, 'right', '500 13px ' + font, 'rgba(255,255,255,.8)');
   const tt = fmt(T.total); c.font = '900 24px ' + font; const tw = c.measureText(tt).width; tx(tt, 18, y + 58, 'left', '900 24px ' + font, '#fff'); tx('ریال', 18 + tw + 8, y + 60, 'left', '500 15px ' + font, '#fff');
