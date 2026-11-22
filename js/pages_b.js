@@ -175,7 +175,7 @@ Pages.ras = {
     const rowsH = () => S.rows.map((r, i) => '<div class="row" style="margin-bottom:8px"><div class="grow"><input data-f="d" data-i="' + i + '" class="ltr" inputmode="decimal" placeholder="تاریخ" value="' + esc(r.d) + '"></div><div class="grow"><input data-f="a" data-i="' + i + '" class="ltr" inputmode="numeric" placeholder="مبلغ (ریال)" value="' + esc(r.a) + '"></div><button class="btn sm sec" data-rm="' + i + '" style="padding:10px">✕</button></div>').join('');
     root.innerHTML = '<div class="card"><h2>راس‌گیری چک</h2><label>تاریخ مبدأ (خالی = امروز ' + jfmt(t[0], t[1], t[2]) + ')</label><input id="base" class="ltr" inputmode="decimal" value="' + esc(S.base) + '" placeholder="امروز">' +
       '<h2 style="margin-top:14px">چک‌ها</h2><div id="rows">' + rowsH() + '</div><div class="grid2"><button class="btn sec" id="add">+ افزودن چک</button><button class="btn sec" id="clr">پاک‌کردن همه</button></div>' +
-      '<button class="btn green block" id="go" style="margin-top:10px">محاسبه راس</button></div><div id="res"></div>';
+      '<button class="btn green block" id="go" style="margin-top:10px">محاسبه راس</button><div class="grid2" style="margin-top:8px"><button class="btn sec" id="svr">💾 ذخیره</button><button class="btn sec" id="svl">📂 ذخیره‌شده‌ها</button></div></div><div id="res"></div>';
     const bind = () => {
       root.querySelectorAll('[data-f]').forEach(inp => {
         inp.oninput = () => { const r = S.rows[+inp.dataset.i]; if (inp.dataset.f === 'a') { const c = commas(inp.value); inp.value = c; r.a = c; } else r.d = inp.value; Ras.save(); };
@@ -203,6 +203,36 @@ Pages.ras = {
     root.querySelector('#add').onclick = () => { S.rows.push({ d: '', a: '' }); Ras.save(); root.querySelector('#rows').innerHTML = rowsH(); bind(); };
     root.querySelector('#clr').onclick = () => { S.rows = [{ d: '', a: '' }, { d: '', a: '' }]; Ras.save(); this.render(root); };
     root.querySelector('#go').onclick = () => { root.querySelectorAll('[data-f="d"]').forEach(x => { x.value = Ras.norm(x.value); S.rows[+x.dataset.i].d = x.value; }); Ras.save(); show(); };
+    /* ذخیره / ذخیره‌شده‌ها (در حافظه‌ی همین گوشی) */
+    const savedList = () => lsGet('sm_ras_saved', []);
+    const rowsOk = () => S.rows.filter(r => String(r.d).trim() || String(r.a).trim());
+    root.querySelector('#svr').onclick = () => {
+      const rows = rowsOk(); if (!rows.length) { toast('ابتدا چک‌ها را وارد کنید', true); return; }
+      const r = Ras.calc(), def = (r && !r.err) ? 'راس ' + r.ras : 'راس‌گیری';
+      openSheet('ذخیره‌ی راس‌گیری', '<label>نام (مثلاً نام مشتری)</label><input id="svName" value="' + esc(def) + '"><button class="btn block" id="svOk" style="margin-top:10px">ذخیره</button>', b => {
+        b.querySelector('#svOk').onclick = () => {
+          const name = b.querySelector('#svName').value.trim() || def, l = savedList();
+          l.unshift({ id: Date.now(), name, at: Date.now(), base: S.base, rows: rows.map(x => ({ d: x.d, a: x.a })), total: r && !r.err ? r.total : 0, ras: r && !r.err ? r.ras : '' });
+          lsSet('sm_ras_saved', l); closeSheet(); toast('ذخیره شد');
+        };
+      });
+    };
+    root.querySelector('#svl').onclick = () => {
+      const draw = b => {
+        const l = savedList();
+        b.innerHTML = l.length ? l.map(x => '<div class="item"><div class="row between"><span class="t">' + esc(x.name) + '</span><span class="amt">' + (x.total ? fmt(x.total) : '') + '</span></div><div class="row between m"><span>' + fa(x.rows.length) + ' چک' + (x.ras ? ' · راس ' + fa(x.ras) : '') + '</span><span class="row"><button class="btn sm" data-ld="' + x.id + '">بارگذاری</button><button class="btn sm sec" data-dl="' + x.id + '">حذف</button></span></div></div>').join('') : '<div class="muted" style="padding:12px">هنوز چیزی ذخیره نشده است.</div>';
+        b.querySelectorAll('[data-ld]').forEach(k => k.onclick = () => {
+          const x = savedList().find(y => String(y.id) === k.dataset.ld); if (!x) return;
+          S.base = x.base || Ras.today(); S.rows = x.rows.map(y => ({ d: y.d, a: y.a })); if (!S.rows.length) S.rows = [{ d: '', a: '' }];
+          Ras.save(); closeSheet(); this.render(root); setTimeout(() => { const g = root.querySelector('#go'); if (g) g.click(); }, 50);
+        });
+        b.querySelectorAll('[data-dl]').forEach(k => k.onclick = () => {
+          if (k.dataset.sure !== '1') { k.dataset.sure = '1'; k.textContent = 'مطمئنید؟'; return; }
+          lsSet('sm_ras_saved', savedList().filter(y => String(y.id) !== k.dataset.dl)); draw(b);
+        });
+      };
+      openSheet('ذخیره‌شده‌ها', '', b => draw(b));
+    };
     bind();
   }
 };
