@@ -19,10 +19,10 @@ const DS = {
 const Store = { data: {}, at: {}, err: {}, busy: false };
 /* حواله‌ی تکراری ابر (همان شماره + تاریخ + مشتری) فقط یک بار نشان داده شود؛ قدیمی‌ترین می‌ماند */
 function dedupeRows(k, arr) {
-  if (k !== 'invoices' || !Array.isArray(arr)) return arr;
+  if ((k !== 'invoices' && k !== 'store') || !Array.isArray(arr)) return arr;
   const seen = new Set(), out = [];
   arr.forEach(r => {
-    const key = [en(String(r.invoice_no || '')).trim(), String(r.date || '').trim(), String(r.customer || '').trim()].join('|');
+    const key = [en(String(r.invoice_no || '')).trim(), String(r.date || '').trim(), String(r.customer || '').trim()].concat(k === 'store' ? [String(r.total || '0').replace(/,/g, '').trim()] : []).join('|');
     if (seen.has(key)) return; seen.add(key); out.push(r);
   });
   return out;
