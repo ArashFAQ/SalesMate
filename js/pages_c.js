@@ -157,6 +157,28 @@ async function latestVersions() {
   try { const r = await fetch('https://raw.githubusercontent.com/ArashFAQ/salesmate/main/js/core.js?t=' + Date.now(), { cache: 'no-store' }); if (r.ok) { const t = await r.text(); const m = t.match(/APP_VERSION\s*=\s*'([\d.]+)'/); web = m ? m[1] : null; } } catch (e) {}
   return { apk, web };
 }
+/* دانلود و نصب درون‌برنامه‌ای (افزونه‌ی بومی ApkUpdater)؛ اگر در این نسخه نبود false برمی‌گرداند */
+async function nativeUpdate(out, ver) {
+  const C = window.Capacitor;
+  let P = null;
+  try { if (C && C.registerPlugin && (!C.isPluginAvailable || C.isPluginAvailable('ApkUpdater'))) P = C.registerPlugin('ApkUpdater'); } catch (e) {}
+  if (!P) return false;
+  const box = out.querySelector('#upBox');
+  const show = h => { box.innerHTML = h; };
+  const doInstall = async () => {
+    const r = await P.install();
+    if (r && r.needPermission) show('<div class="err-t" style="margin-bottom:8px">اجازه‌ی «نصب از این برنامه» را روشن کنید، برگردید و دکمه‌ی زیر را بزنید.</div><button class="btn block" id="upInst">نصب نسخه‌ی ' + fa(ver) + '</button>'), box.querySelector('#upInst').onclick = () => doInstall().catch(() => nativeFail());
+  };
+  const nativeFail = () => { show('<div class="err-t">نصب مستقیم ممکن نشد؛ دانلود از مرورگر باز شد.</div>'); openExternal(APK_URL); };
+  try {
+    show('<div class="muted" id="upTxt">در حال دانلود… ۰٪</div><div style="height:8px;background:var(--line);border-radius:6px;margin-top:6px;overflow:hidden"><div id="upBar" style="height:100%;width:0;background:#1565C0;transition:width .15s"></div></div>');
+    const h = await P.addListener('progress', e => { const pc = e.total > 0 ? Math.round(100 * e.done / e.total) : 0; const t = box.querySelector('#upTxt'), b = box.querySelector('#upBar'); if (t) t.textContent = 'در حال دانلود… ' + fa(pc) + '٪'; if (b) b.style.width = pc + '%'; });
+    try { await P.download({ url: APK_URL }); } finally { try { h.remove(); } catch (e) {} }
+    show('<div class="muted">دانلود کامل شد؛ صفحه‌ی نصب باز می‌شود…</div>');
+    await doInstall();
+  } catch (e) { nativeFail(); }
+  return true;
+}
 function openExternal(url) { try { const w = window.open(url, '_system'); if (!w) location.href = url; } catch (e) { location.href = url; } }
 function bindUpdateCard(root) {
   const btn = root.querySelector('#upChk'), out = root.querySelector('#upOut'); if (!btn) return;
@@ -169,7 +191,7 @@ function bindUpdateCard(root) {
     if (isApp) {
       if (v.apk && verGt(v.apk, APP_VERSION)) out.innerHTML = '<div style="margin-bottom:8px">نسخه‌ی جدید <b>' + fa(v.apk) + '</b> آماده است.</div><button class="btn block" id="upGo">⬇ دانلود و نصب نسخه‌ی ' + fa(v.apk) + '</button><div class="muted" style="margin-top:6px;font-size:12px">پس از دانلود، فایل را باز کنید و «نصب» را بزنید (اطلاعات شما پاک نمی‌شود).</div>';
       else out.innerHTML = '<div>نسخه‌ی ' + fa(v.web) + ' منتشر شده ولی فایل نصبی آن هنوز ساخته نشده. کمی بعد دوباره بررسی کنید.</div>';
-      const go = out.querySelector('#upGo'); if (go) go.onclick = () => openExternal(APK_URL);
+      const go = out.querySelector('#upGo'); if (go) go.onclick = async () => { go.disabled = true; out.insertAdjacentHTML('beforeend', '<div id="upBox" style="margin-top:10px"></div>'); if (!(await nativeUpdate(out, v.apk))) { const bx = out.querySelector('#upBox'); if (bx) bx.remove(); openExternal(APK_URL); } go.disabled = false; };
     } else {
       out.innerHTML = '<div style="margin-bottom:8px">نسخه‌ی جدید <b>' + fa(newest) + '</b> موجود است.</div><button class="btn block" id="upGo">⟳ به‌روزرسانی همین حالا</button>';
       out.querySelector('#upGo').onclick = async () => { try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } catch (e) {} location.reload(); };
