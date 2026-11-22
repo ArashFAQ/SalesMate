@@ -33,6 +33,23 @@ jobs:
       - name: Icons
         run: npx @capacitor/assets generate --android
       - run: npx cap sync android
+      - name: Native updater plugin, install permission, versionCode
+        run: |
+          APPID=$(node -p "require('./capacitor.config.json').appId")
+          DIR=android/app/src/main/java/$(echo "$APPID" | tr . /)
+          ls "$DIR"
+          sed "s/__PKG__/$APPID/g" native/ApkUpdater.java.tpl > "$DIR/ApkUpdater.java"
+          sed "s/__PKG__/$APPID/g" native/MainActivity.java.tpl > "$DIR/MainActivity.java"
+          VER=$(grep -m1 -oE "APP_VERSION = '[0-9.]+'" www/js/core.js | grep -oE "[0-9.]+")
+          IFS=. read MA MI PA <<< "$VER"
+          CODE=$((MA*10000 + MI*100 + PA))
+          echo "versionName $VER versionCode $CODE"
+          sed -i -E "s/versionCode [0-9]+/versionCode $CODE/; s/versionName \"[^\"]*\"/versionName \"$VER\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+          grep -q REQUEST_INSTALL_PACKAGES android/app/src/main/AndroidManifest.xml || \
+            sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />#' android/app/src/main/AndroidManifest.xml
+          grep -n "uses-permission\|fileprovider" android/app/src/main/AndroidManifest.xml
+          cat android/app/src/main/res/xml/file_paths.xml
       - name: Stable signing key (so updates install over the old app)
         run: |
           mkdir -p ~/.android
