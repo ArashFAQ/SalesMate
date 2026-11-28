@@ -144,7 +144,7 @@ function fifoFor(name) {
 /* مانده‌ی نمایشی یک حواله: اگر مشتری بدهکار است، سهم FIFO؛ وگرنه اختلاف خود حواله */
 function invShownBalance(inv) { const f = fifoFor(inv.customer); return f.net > 0 ? (f.alloc[inv.id] || 0) : invBalance(inv); }
 /* ردیف بدون مبلغ (سمپل) جزو متراژ فروش نیست */
-function saleQ2(r) { return (r && r.cost != null && r.cost !== '' && amount(r.cost) <= 0) ? 0 : num(r && r.qty2); }
+function saleQ2(r) { return (r && amount(r.cost) <= 0 && amount(r.price) <= 0) ? 0 : num(r && r.qty2); }
 function invMeters(inv) {                 // فقط پارکت: متر مربع
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') !== 'parquet') return 0;
   return (d.rows || []).reduce((s, r) => s + saleQ2(r), 0);
