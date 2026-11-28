@@ -161,7 +161,7 @@ async function latestVersions() {
 async function nativeUpdate(out, ver) {
   const C = window.Capacitor;
   let P = null;
-  try { if (C && C.registerPlugin && (!C.isPluginAvailable || C.isPluginAvailable('ApkUpdater'))) P = C.registerPlugin('ApkUpdater'); } catch (e) {}
+  try { if (C) P = (C.Plugins && C.Plugins.ApkUpdater) || ((C.registerPlugin && (!C.isPluginAvailable || C.isPluginAvailable('ApkUpdater'))) ? C.registerPlugin('ApkUpdater') : null); } catch (e) {}
   if (!P) return false;
   const box = out.querySelector('#upBox');
   const show = h => { box.innerHTML = h; };
