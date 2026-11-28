@@ -143,13 +143,15 @@ function fifoFor(name) {
 }
 /* مانده‌ی نمایشی یک حواله: اگر مشتری بدهکار است، سهم FIFO؛ وگرنه اختلاف خود حواله */
 function invShownBalance(inv) { const f = fifoFor(inv.customer); return f.net > 0 ? (f.alloc[inv.id] || 0) : invBalance(inv); }
+/* ردیف بدون مبلغ (سمپل) جزو متراژ فروش نیست */
+function saleQ2(r) { return (r && r.cost != null && r.cost !== '' && amount(r.cost) <= 0) ? 0 : num(r && r.qty2); }
 function invMeters(inv) {                 // فقط پارکت: متر مربع
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') !== 'parquet') return 0;
-  return (d.rows || []).reduce((s, r) => s + num(r.qty2), 0);
+  return (d.rows || []).reduce((s, r) => s + saleQ2(r), 0);
 }
 function invSheets(inv) {                 // ام‌دی‌اف: ورق
   const d = itemsOf(inv); if (!d || (d.tab || 'parquet') === 'parquet') return 0;
-  return (d.rows || []).reduce((s, r) => s + num(r.qty2), 0);
+  return (d.rows || []).reduce((s, r) => s + saleQ2(r), 0);
 }
 /* تشخیص کالای ام‌دی‌اف (پالت/ورق) از نام کالا؛ بقیه پارکت (کارتن/متر مربع) */
 function isMdfName(n) {
@@ -176,8 +178,8 @@ function storeItems(s) {
   let it = s.items_json; if (typeof it === 'string') { try { it = JSON.parse(it); } catch (e) { it = []; } }
   return Array.isArray(it) ? sampleLast(it.filter(x => x && typeof x === 'object')) : [];
 }
-function storeMeters(s) { return (s.tab && s.tab !== 'parquet') ? 0 : storeItems(s).reduce((a, r) => a + num(r.qty2), 0); }
-function storeSheets(s) { return (s.tab && s.tab !== 'parquet') ? storeItems(s).reduce((a, r) => a + num(r.qty2), 0) : 0; }
+function storeMeters(s) { return (s.tab && s.tab !== 'parquet') ? 0 : storeItems(s).reduce((a, r) => a + saleQ2(r), 0); }
+function storeSheets(s) { return (s.tab && s.tab !== 'parquet') ? storeItems(s).reduce((a, r) => a + saleQ2(r), 0) : 0; }
 function ago(ts) {
   if (!ts) return '—';
   const m = Math.round((Date.now() - ts) / 60000);

@@ -245,7 +245,7 @@ function storeLine(it, tab) {
   const u = tab === 'parquet' ? ['کارتن', 'متر مربع'] : ['پالت', 'ورق'];
   if (it.qty1 !== '' && it.qty1 != null) b.push(fa(qtyInt(it.qty1)) + ' ' + u[0]);
   if (it.qty2 !== '' && it.qty2 != null) b.push(fa(String(it.qty2)) + ' ' + u[1]);
-  if (it.price) b.push('فی ' + fmt(it.price)); if (it.cost) b.push('مبلغ ' + fmt(it.cost));
+  if (it.price) { const p = +amount(it.price), q = num(it.qty2), c = +amount(it.cost), tx = p > 0 && q > 0 && c > 0 && Math.abs(p * q * 1.1 - c) <= Math.max(2, c * 0.001); b.push('فی ' + fmt(tx ? Math.round(p * 1.1) : it.price) + (tx ? ' (با مالیات)' : '')); } if (it.cost) b.push('مبلغ ' + fmt(it.cost));
   return b.join(' · ');
 }
 Pages.store = {
