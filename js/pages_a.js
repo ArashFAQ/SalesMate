@@ -175,14 +175,15 @@ function stmCanvas(name, st) {
   return cv;
 }
 function showStatement(name) {
-  const st = stmCompute(name);
-  if (!st.balance && !st.debts.length) { toast('این مشتری تسویه است', false); return; }
+  const st0 = stmCompute(name);
+  if (!st0.balance && !st0.debts.length) { toast('این مشتری تسویه است', false); return; }
+  const st = stmRound(st0);               // مانده‌ها به نزدیک‌ترین هزار (پیش‌نمایش، تصویر و PDF)
   openSheet((st.balance < 0 ? 'طلبکاری — ' : 'بدهکاری — ') + name, '<div class="card"><div id="stmPrev" style="text-align:center;min-height:120px"></div><div class="grid2" style="margin-top:10px"><button class="btn block" id="stmImg">🖼 ارسال تصویر</button><button class="btn block" id="stmPdf">📄 ارسال PDF</button></div></div>', body => {
     const prev = body.querySelector('#stmPrev'), build = async () => { try { await document.fonts.ready; } catch (e) { } return stmCanvas(name, st); };
     build().then(cv => { cv.style.cssText = 'width:100%;height:auto;border:1px solid var(--line);border-radius:10px'; prev.appendChild(cv); });
     const txt = (st.balance < 0 ? 'طلبکاری ' : 'بدهکاری ') + name + ': ' + fmt(Math.abs(st.balance)) + ' ریال';
     body.querySelector('#stmImg').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'png', txt);
-    body.querySelector('#stmPdf').onclick = async () => { const r = stmRound(st); try { await document.fonts.ready; } catch (e) { } shareCanvas(stmCanvas(name, r), 'bedehi_' + name, 'pdf', (r.balance < 0 ? 'طلبکاری ' : 'بدهکاری ') + name + ': ' + fmt(Math.abs(r.balance)) + ' ریال'); };
+    body.querySelector('#stmPdf').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'pdf', txt);
   });
 }
 
