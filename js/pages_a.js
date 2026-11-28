@@ -127,6 +127,11 @@ function stmCompute(name) {
   debts.sort((a, b) => (a.date + a.no).localeCompare(b.date + b.no));
   return { debts, credit, extra, balance: debts.reduce((x, d) => x + d.rem, 0) + extra - credit };
 }
+/* نسخه‌ی رندشده برای PDF: مانده‌ها به نزدیک‌ترین هزار؛ مبلغ و پرداخت با خرده می‌ماند */
+function stmRound(st) {
+  const debts = st.debts.map(d => Object.assign({}, d, { rem: roundK(d.rem) })), extra = st.extra ? roundK(st.extra) : 0, credit = st.credit ? roundK(st.credit) : 0;
+  return { debts, extra, credit, balance: debts.reduce((x, d) => x + d.rem, 0) + extra - credit };
+}
 function stmCanvas(name, st) {
   const W = 800, S = 3, font = 'Vazirmatn, Tahoma, sans-serif', BLUE = '#1565C0', RED = '#DC2626', cred = st.balance < 0;
   const sums = []; if (!cred) { if (st.debts.length) sums.push(['جمع حواله‌های تسویه‌نشده', fmt(st.debts.reduce((a, d) => a + d.rem, 0)), '#0F172A']); if (st.extra) sums.push(['تعدیل / بدهی پیشین', fmt(st.extra), '#0F172A']); if (st.credit) sums.push(['طلبکاری (کسر از جمع)', '−' + fmt(st.credit), '#059669']); }
@@ -177,7 +182,7 @@ function showStatement(name) {
     build().then(cv => { cv.style.cssText = 'width:100%;height:auto;border:1px solid var(--line);border-radius:10px'; prev.appendChild(cv); });
     const txt = (st.balance < 0 ? 'طلبکاری ' : 'بدهکاری ') + name + ': ' + fmt(Math.abs(st.balance)) + ' ریال';
     body.querySelector('#stmImg').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'png', txt);
-    body.querySelector('#stmPdf').onclick = async () => shareCanvas(await build(), 'bedehi_' + name, 'pdf', txt);
+    body.querySelector('#stmPdf').onclick = async () => { const r = stmRound(st); try { await document.fonts.ready; } catch (e) { } shareCanvas(stmCanvas(name, r), 'bedehi_' + name, 'pdf', (r.balance < 0 ? 'طلبکاری ' : 'بدهکاری ') + name + ': ' + fmt(Math.abs(r.balance)) + ' ریال'); };
   });
 }
 
